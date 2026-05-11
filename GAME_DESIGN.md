@@ -33,14 +33,14 @@ Não teremos barra de vida convencional. Teremos um **Nível de Desespero (Choro
 
 ### B. Sistema Opressor (HUD = Inimigo)
 O HUD não é só informativo, é uma mecânica de ameaça.
-* Eventos aleatórios pipocam na tela num display de "celular". Ex: *"Confirme sua foto"*, *"Aviso de Rota Atrasada"*.
-* Esses pop-ups **cobrem a rua** fisicamente na tela. 
-* O jogador precisa tirar a mão da direção momentaneamente ou clicar interativamente para fechar o popup se quiser voltar a enxergar perfeitamente os próprios buracos à frente. 
+* O aplicativo abre **spam de chat de cliente** durante a pilotagem ("Ta chegando?", "Desce no portao", "Traz troco?").
+* Essas mensagens **cobrem a rua** fisicamente na tela e atrapalham a visao da pista.
+* O jogador precisa responder com um botao rapido (ex: "Estou a caminho") para fechar a janela e recuperar a visibilidade.
 
 ### C. A Física da Tempestade (Transição de Cenário)
 A partir do meio do jogo (quando a mãe sai desesperada no background literário), desaba a chuva na pista.
 * **Alteração Técnica (Física e Controles):** O atributo de atrito (friction) lateral do componente KAPLAY muda. Quando a pista estiver molhada, as respostas dos eixos encurtam e arrastam (Aquaplanagem). Obriga o jogador a calcular o tempo das esquivas com bastante antecedência, redobrando a chance de bater.
-* **O Bate-Boca do Condomínio (Boss Fight Simbólico):** Um evento interativo onde a moto para, e em vez de andar, o jogador precisa "clicar" rápido nas respostas certas da HUD do App e bater na porta / buzina (usando as ações) no tempo correto para esgotar a "paciência" do cliente Engravatado, consumindo timer brutal do App. 
+* **O Bate-Boca do Condomínio (Boss Fight Simbólico):** Um evento interativo onde a moto para, e em vez de andar, o jogador precisa responder rapido ao chat do cliente no portao. O filho do Inspetor recebe a entrega e reclama. O Inspetor chega logo depois e entra na discussao. O tempo gasto aqui drena o cronometro do App.
 
 ## 5. Próximos Passos (Plano de Greybox)
 O programador deve começar focando em isolar a mecânica de trânsito.
