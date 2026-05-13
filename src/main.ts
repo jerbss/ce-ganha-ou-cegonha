@@ -75,6 +75,92 @@ k.scene("game", () => {
         "player"
     ]);
 
+    // ---- SISTEMA DE TRÁFEGO (NPCs) ----
+    const spawnCar = () => {
+        const carLanes = [0, 2, 4]; // Apenas faixas PAR
+        const pickedLane = carLanes[Math.floor(k.rand(0, carLanes.length))];
+        
+        const randVal = Math.random();
+        let archetype;
+
+        if (randVal < 0.33) {
+            // LENTO: Surge na direita. Cor cinza.
+            archetype = { type: 'LENTO', realSpeed: 250, color: k.rgb(150, 150, 150), startX: k.width() + 200 };
+        } else if (randVal < 0.66) {
+            // NORMAL: Surge na direita. Cor azul escuro.
+            archetype = { type: 'NORMAL', realSpeed: 500, color: k.rgb(30, 40, 100), startX: k.width() + 200 };
+        } else {
+            // APRESSADO: Surge da esquerda. Vermelho ou prata.
+            archetype = { type: 'APRESSADO', 
+                          realSpeed: 950, 
+                          color: Math.random() > 0.5 ? k.rgb(200, 40, 40) : k.rgb(220, 220, 220), 
+                          startX: -200 };
+            
+            // Aborta o spawn mágico se o jogador tiver sido punido e estiver lá atrás na tela (-200 a 50)
+            if (player.pos.x < 50) return;
+        }
+
+        const car = k.add([
+            k.rect(140, 40, { radius: 4 }),
+            k.pos(archetype.startX, LANES[pickedLane]),
+            k.anchor("center"),
+            k.color(archetype.color),
+            k.area(),
+            k.z(5),
+            "car",
+            { realSpeed: archetype.realSpeed }
+        ]);
+
+        car.onUpdate(() => {
+            // Detecção de carro na frente (mesma faixa, próximo)
+            const carsAhead = k.get("car").filter((c: any) => {
+                const sameY = Math.abs(c.pos.y - car.pos.y) < 5; // Mesma faixa
+                const ahead = c.pos.x > car.pos.x && c.pos.x - car.pos.x < 200; // Até 200px à frente
+                return sameY && ahead && c !== car;
+            });
+
+            // Se houver carro na frente, reduz velocidade para engarrafamento realista
+            let adjustedRealSpeed = car.realSpeed;
+            if (carsAhead.length > 0) {
+                adjustedRealSpeed = Math.min(car.realSpeed, (carsAhead[0] as any).realSpeed - 50); // Acompanha o de frente com margem
+            }
+
+            // Velocidade Absoluta: física de relatividade realista
+            const screenSpeed = adjustedRealSpeed - currentScrollSpeed;
+            car.move(screenSpeed, 0);
+            
+            // Limpeza: destrói se sair demais tanto pela esquerda quanto pela direita
+            if (car.pos.x < -300 || car.pos.x > k.width() + 300) {
+                car.destroy();
+            }
+        });
+    };
+
+    const loopSpawn = () => {
+        k.wait(k.rand(1.5, 3.0), () => {
+            // Limita a quantidade de instâncias geradas pra não entupir de forma punitiva a tela
+            if (k.get("car").length < 6) {
+                spawnCar();
+            }
+            loopSpawn(); // Chama recursivamente
+        });
+    };
+    loopSpawn();
+
+    // ---- COLISÕES ----
+    player.onCollide("car", (car: any) => {
+        k.shake(8); // Impacto forte
+        currentScrollSpeed = 50; // Perda brusca e instantânea da inércia
+        player.pos.x -= 80; // A moto capota pra trás no cenário
+        car.destroy(); // Carro abatido some pra abrir alas
+
+        // Moto pisca em vermelho para mostrar que tomou porrada
+        player.color = k.rgb(255, 50, 50);
+        k.wait(0.5, () => {
+            player.color = k.rgb(0, 150, 255); // Cor sólida restaurada
+        });
+    });
+
     // 5. Troca de Faixas (Y eixo)
     const moveLane = (dir: number) => {
         if (isChangingLane) return;
