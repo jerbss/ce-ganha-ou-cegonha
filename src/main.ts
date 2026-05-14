@@ -27,6 +27,13 @@ k.scene("game", () => {
     let corridorTimer = 0;
     const CORRIDOR_GRACE = 0.9; // seconds
 
+    // Estado do Jogo (MVP)
+    let stress = 0;
+    let timeRemaining = 120;
+    let distanceTraveled = 0;
+    const TARGET_DISTANCE = 5000;
+    let isDamaged = false; // Controle de feedback visual de dano
+
     // Mapa de carros ativos por faixa (optimização O(n) por faixa)
     const activeCarsByLane: Record<number, any[]> = {
         0: [],
@@ -98,9 +105,44 @@ k.scene("game", () => {
         k.anchor("center"),
         k.color(0, 150, 255),
         k.area(),
-        k.z(10), // SEMPRE em cima de tudo
+        k.z(0),
         "player"
     ]);
+
+    let rainActive = true;
+
+    const spawnRainDrop = () => {
+        if (!rainActive) return;
+
+        const drop = k.add([
+            k.rect(2, 14, { radius: 1 }),
+            k.pos(k.rand(0, k.width()), k.rand(-40, 0)),
+            k.anchor("center"),
+            k.color(90, 150, 255),
+            k.opacity(0.65),
+            k.z(60),
+            "rain"
+        ]);
+
+        drop.onUpdate(() => {
+            drop.move(-currentScrollSpeed * 0.15, 520 * k.dt());
+            drop.pos.x -= 220 * k.dt();
+            if (drop.pos.y > k.height() + 30) {
+                drop.destroy();
+            }
+        });
+    };
+
+    const loopRain = () => {
+        k.wait(k.rand(0.04, 0.12), () => {
+            if (k.get("rain").length < 80) {
+                const dropsToSpawn = Math.floor(k.rand(2, 5));
+                for (let i = 0; i < dropsToSpawn; i++) spawnRainDrop();
+            }
+            loopRain();
+        });
+    };
+    loopRain();
 
     // ---- SISTEMA DE TRÁFEGO (NPCs) ----
     const spawnCar = () => {
@@ -137,15 +179,17 @@ k.scene("game", () => {
                 k.anchor("center"),
                 k.color(archetype.color),
                 k.area(),
-                k.z(5),
+                k.z(0),
                 "car",
-                { realSpeed: archetype.realSpeed, lane: pickedLane, targetLane: null, slowedSince: 0, isChangingLane: false }
+                { realSpeed: archetype.realSpeed, lane: pickedLane, targetLane: null as number | null, slowedSince: 0, isChangingLane: false }
             ]);
 
             // registrar no mapa de faixa
             addCarToLane(pickedLane, car);
 
             car.onUpdate(() => {
+                car.z = Math.floor(car.pos.y);
+
                 // Apenas checar carros na mesma faixa (otimização)
                 const checkLane = car.isChangingLane && car.targetLane !== null ? car.targetLane : car.lane;
                 const sameLaneCars = activeCarsByLane[checkLane] || [];
@@ -273,8 +317,70 @@ k.scene("game", () => {
     };
     loopSpawn();
 
+    // ---- BURACOS ----
+    const spawnPothole = () => {
+        const laneIndex = Math.floor(k.rand(0, LANES.length));
+        const laneY = LANES[laneIndex];
+
+        const pothole = k.add([
+            k.rect(40, 20, { radius: 10 }),
+            k.pos(k.width() + 120, laneY),
+            k.anchor("center"),
+            k.color(20, 20, 22),
+            k.area(),
+            k.z(0),
+            "pothole"
+        ]);
+
+        pothole.onUpdate(() => {
+            pothole.z = Math.floor(pothole.pos.y);
+            pothole.move(-currentScrollSpeed, 0);
+            if (pothole.pos.x < -200) {
+                pothole.destroy();
+            }
+        });
+    };
+
+    const loopPotholes = () => {
+        k.wait(k.rand(4.0, 5.0), () => {
+            if (k.get("pothole").length < 5) {
+                spawnPothole();
+            }
+            loopPotholes();
+        });
+    };
+    loopPotholes();
+
     // ---- COLISÕES ----
+    player.onCollide("pothole", () => {
+        k.shake(4);
+        stress += 15;
+        isDamaged = true;
+        const originalY = player.pos.y;
+        k.tween(
+            player.pos.y,
+            originalY - 12,
+            0.06,
+            (val: any) => player.pos.y = val,
+            k.easings.easeOutQuad
+        ).onEnd(() => {
+            k.tween(
+                player.pos.y,
+                originalY,
+                0.08,
+                (val: any) => player.pos.y = val,
+                k.easings.easeInQuad
+            );
+        });
+        
+        // Feedback de dano
+        player.color = k.rgb(255, 50, 50);
+        k.wait(0.5, () => isDamaged = false);
+    });
+
     player.onCollide("car", (car: any) => {
+        stress += 20;
+        isDamaged = true;
         // Se o carro bateu NA TRASEIRA do player (veio de trás)
         if (car.pos.x < player.pos.x) {
             // Empurra o player pra frente e aumenta o scroll (impacto por trás)
@@ -282,14 +388,14 @@ k.scene("game", () => {
             currentScrollSpeed = Math.min(ACCEL_SCROLL_SPEED, currentScrollSpeed + 400);
             // Indicador de dano (vermelho rápido)
             player.color = k.rgb(255, 120, 80);
-            k.wait(0.4, () => player.color = k.rgb(0, 150, 255));
+            k.wait(0.4, () => isDamaged = false);
         } else {
             // Bateu na frente do carro (player bate de frente)
             k.shake(8);
             currentScrollSpeed = 50; // Perda brusca da inércia
             player.pos.x -= 80; // A moto capota pra trás no cenário
             player.color = k.rgb(255, 50, 50);
-            k.wait(0.5, () => player.color = k.rgb(0, 150, 255));
+            k.wait(0.5, () => isDamaged = false);
         }
 
         // Em todos os casos, remover o carro que causou o impacto
@@ -304,11 +410,12 @@ k.scene("game", () => {
         if (nextLane >= 0 && nextLane < LANES.length) {
             isChangingLane = true;
             currentLane = nextLane;
+            const laneTweenDuration = rainActive ? 0.144 : 0.12;
             
             k.tween(
                 player.pos.y, 
                 LANES[currentLane], 
-                0.12, 
+                laneTweenDuration, 
                 (val) => player.pos.y = val, 
                 k.easings.easeOutQuad
             ).onEnd(() => {
@@ -322,6 +429,8 @@ k.scene("game", () => {
 
     // 6. Sistema de Motor (Acelerar/Freio) e velocidade implac�vel global
     k.onUpdate(() => {
+        player.z = Math.floor(player.pos.y);
+
         let targetX = REST_X;
         let targetSpeed = BASE_SCROLL_SPEED;
 
@@ -350,24 +459,81 @@ k.scene("game", () => {
         // Inércia mais realista para aceleração e frenagem no mundo real
         player.pos.x = k.lerp(player.pos.x, targetX, 1.8 * k.dt());
         currentScrollSpeed = k.lerp(currentScrollSpeed, targetSpeed, 2.0 * k.dt());
+
+        // ---- REGRAS DE GAME DESIGN (MVP) ----
+        // Alta Velocidade sobe o estresse
+        if (currentScrollSpeed > 800) {
+            stress += 5 * k.dt();
+        }
+        stress = Math.min(100, Math.max(0, stress));
+
+        // Tempo e Distância
+        timeRemaining -= k.dt();
+        distanceTraveled += (currentScrollSpeed / 10) * k.dt(); // 10 px = 1 metro
+
+        // Condições de Vitória e Derrota
+        if (stress >= 100) {
+            k.go("gameover", { win: false, reason: "O bebê chorou muito! Você foi denunciado." });
+        } else if (distanceTraveled >= TARGET_DISTANCE) {
+            k.go("gameover", { win: true, reason: "Entrega concluída! O bebê sobreviveu." });
+        } else if (timeRemaining <= 0) {
+            k.go("gameover", { win: false, reason: "O tempo acabou! Entrega falhou (Geladeira)." });
+        }
+
+        // Feedback de Estresse (Moto Tremendo e Piscando)
+        if (!isDamaged) {
+            if (stress > 70) {
+                if (Math.random() < 0.1) k.shake(1);
+                player.color = Math.floor(k.time() * 10) % 2 === 0 ? k.rgb(255, 255, 0) : k.rgb(0, 150, 255);
+            } else {
+                player.color = k.rgb(0, 150, 255); // Cor normal
+            }
+        }
     });
 
-    // HUD Debug Simplificado
-    k.add([
-        k.text("Setas CIMA/BAIXO: Mudar Faixa  |  DIR: Acelerar  |  ESQ: Freio", { size: 18 }),
-        k.pos(20, 20),
-        k.color(200, 200, 200)
-    ]);
-    
-    const speedometer = k.add([
-        k.text("", { size: 24 }),
-        k.pos(20, 50),
-        k.color(255, 255, 0)
-    ]);
+    // ---- HUD (MÉDIA FIDELIDADE) ----
+    k.add([ k.rect(300, 20), k.pos(20, 30), k.color(50, 50, 50), k.fixed(), k.z(100) ]);
+    const stressBar = k.add([ k.rect(0, 20), k.pos(20, 30), k.color(255, 50, 50), k.fixed(), k.z(101) ]);
+    k.add([ k.text("ESTRESSE: BEBÊ", { size: 16 }), k.pos(20, 10), k.color(255, 255, 255), k.fixed(), k.z(101) ]);
+
+    const timerText = k.add([ k.text("120.0s", { size: 32 }), k.pos(k.width()/2, 30), k.anchor("center"), k.color(255, 255, 255), k.fixed(), k.z(101) ]);
+
+    k.add([ k.rect(300, 20), k.pos(k.width() - 320, 30), k.color(50, 50, 50), k.fixed(), k.z(100) ]);
+    const distBar = k.add([ k.rect(0, 20), k.pos(k.width() - 320, 30), k.color(50, 255, 50), k.fixed(), k.z(101) ]);
+    const distText = k.add([ k.text("META: 0 / 5000 m", { size: 16 }), k.pos(k.width() - 320, 10), k.color(255, 255, 255), k.fixed(), k.z(101) ]);
 
     k.onUpdate(() => {
-        speedometer.text = `Scroll Vel: ${Math.round(currentScrollSpeed)} px/s`;
+        stressBar.width = (stress / 100) * 300;
+        distBar.width = Math.min((distanceTraveled / TARGET_DISTANCE) * 300, 300);
+        timerText.text = `${Math.max(0, timeRemaining).toFixed(1)}s`;
+        distText.text = `META: ${Math.floor(distanceTraveled)} / ${TARGET_DISTANCE} m`;
     });
 });
 
 k.go("game");
+
+// ---- CENA DE GAME OVER / VITÓRIA ----
+k.scene("gameover", ({ win, reason }: { win: boolean, reason: string }) => {
+    k.add([
+        k.text(win ? "SUCESSO!" : "GAME OVER", { size: 64 }),
+        k.pos(k.width() / 2, k.height() / 2 - 60),
+        k.anchor("center"),
+        k.color(win ? k.rgb(50, 255, 50) : k.rgb(255, 50, 50))
+    ]);
+
+    k.add([
+        k.text(reason, { size: 24 }),
+        k.pos(k.width() / 2, k.height() / 2 + 20),
+        k.anchor("center"),
+        k.color(200, 200, 200)
+    ]);
+
+    k.add([
+        k.text("Pressione [R] para reiniciar", { size: 18 }),
+        k.pos(k.width() / 2, k.height() / 2 + 100),
+        k.anchor("center"),
+        k.color(255, 255, 255)
+    ]);
+
+    k.onKeyPress("r", () => k.go("game"));
+});
