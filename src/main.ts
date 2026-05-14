@@ -32,7 +32,8 @@ k.scene("game", () => {
     let timeRemaining = 120;
     let distanceTraveled = 0;
     const TARGET_DISTANCE = 5000;
-    let isDamaged = false; // Controle de feedback visual de dano
+    let damageTimer = 0; // Controle de feedback visual de dano por tempo
+    let isGameOver = false; // Prevê chamadas múltiplas de fim de jogo
 
     // Mapa de carros ativos por faixa (optimização O(n) por faixa)
     const activeCarsByLane: Record<number, any[]> = {
@@ -322,6 +323,12 @@ k.scene("game", () => {
         const laneIndex = Math.floor(k.rand(0, LANES.length));
         const laneY = LANES[laneIndex];
 
+        // 2. Falha de Level Design: Evitar spawn de buraco embaixo de carro
+        const spawnX = k.width() + 120;
+        const laneArr = activeCarsByLane[laneIndex] || [];
+        const conflict = laneArr.some((c: any) => Math.abs(c.pos.x - spawnX) < 250);
+        if (conflict) return;
+
         const pothole = k.add([
             k.rect(40, 20, { radius: 10 }),
             k.pos(k.width() + 120, laneY),
@@ -355,7 +362,7 @@ k.scene("game", () => {
     player.onCollide("pothole", () => {
         k.shake(4);
         stress += 15;
-        isDamaged = true;
+        damageTimer = 0.5; // Dano centralizado
         const originalY = player.pos.y;
         k.tween(
             player.pos.y,
@@ -372,34 +379,24 @@ k.scene("game", () => {
                 k.easings.easeInQuad
             );
         });
-        
-        // Feedback de dano
-        player.color = k.rgb(255, 50, 50);
-        k.wait(0.5, () => isDamaged = false);
     });
 
     player.onCollide("car", (car: any) => {
         stress += 20;
-        isDamaged = true;
+        damageTimer = 0.5; // Dano centralizado
         // Se o carro bateu NA TRASEIRA do player (veio de trás)
         if (car.pos.x < player.pos.x) {
             // Empurra o player pra frente e aumenta o scroll (impacto por trás)
             player.pos.x += 120;
             currentScrollSpeed = Math.min(ACCEL_SCROLL_SPEED, currentScrollSpeed + 400);
-            // Indicador de dano (vermelho rápido)
-            player.color = k.rgb(255, 120, 80);
-            k.wait(0.4, () => isDamaged = false);
+            // 4. Incoerência Física: Não destrói o carro em batida traseira, deixa ele ultrapassar
         } else {
             // Bateu na frente do carro (player bate de frente)
             k.shake(8);
             currentScrollSpeed = 50; // Perda brusca da inércia
             player.pos.x -= 80; // A moto capota pra trás no cenário
-            player.color = k.rgb(255, 50, 50);
-            k.wait(0.5, () => isDamaged = false);
+            if (car && car.destroy) car.destroy(); // Destrói apenas no impacto frontal
         }
-
-        // Em todos os casos, remover o carro que causou o impacto
-        if (car && car.destroy) car.destroy();
     });
 
     // 5. Troca de Faixas (Y eixo)
@@ -453,7 +450,8 @@ k.scene("game", () => {
                 targetX = BRAKE_X; // Pulls player back on screen
             }
         } else {
-            corridorTimer = 0;
+            // 3. Exploit: Esfriamento gradual em vez de zerar na hora
+            corridorTimer = Math.max(0, corridorTimer - k.dt() * 1.5);
         }
 
         // Inércia mais realista para aceleração e frenagem no mundo real
@@ -464,6 +462,9 @@ k.scene("game", () => {
         // Alta Velocidade sobe o estresse
         if (currentScrollSpeed > 800) {
             stress += 5 * k.dt();
+        } else if (currentScrollSpeed < BASE_SCROLL_SPEED + 50) {
+            // 1. Mecânica Faltante: Frear/Ir devagar alivia o estresse
+            stress -= 4 * k.dt(); 
         }
         stress = Math.min(100, Math.max(0, stress));
 
@@ -472,16 +473,24 @@ k.scene("game", () => {
         distanceTraveled += (currentScrollSpeed / 10) * k.dt(); // 10 px = 1 metro
 
         // Condições de Vitória e Derrota
-        if (stress >= 100) {
-            k.go("gameover", { win: false, reason: "O bebê chorou muito! Você foi denunciado." });
-        } else if (distanceTraveled >= TARGET_DISTANCE) {
-            k.go("gameover", { win: true, reason: "Entrega concluída! O bebê sobreviveu." });
-        } else if (timeRemaining <= 0) {
-            k.go("gameover", { win: false, reason: "O tempo acabou! Entrega falhou (Geladeira)." });
+        if (!isGameOver) {
+            if (stress >= 100) {
+                isGameOver = true;
+                k.go("gameover", { win: false, reason: "O bebê chorou muito! Você foi denunciado." });
+            } else if (distanceTraveled >= TARGET_DISTANCE) {
+                isGameOver = true;
+                k.go("gameover", { win: true, reason: "Entrega concluída! O bebê sobreviveu." });
+            } else if (timeRemaining <= 0) {
+                isGameOver = true;
+                k.go("gameover", { win: false, reason: "O tempo acabou! Entrega falhou (Geladeira)." });
+            }
         }
 
-        // Feedback de Estresse (Moto Tremendo e Piscando)
-        if (!isDamaged) {
+        // 6. Feedback Visual Centralizado
+        if (damageTimer > 0) {
+            damageTimer -= k.dt();
+            player.color = k.rgb(255, 50, 50); // Pisca vermelho no dano
+        } else {
             if (stress > 70) {
                 if (Math.random() < 0.1) k.shake(1);
                 player.color = Math.floor(k.time() * 10) % 2 === 0 ? k.rgb(255, 255, 0) : k.rgb(0, 150, 255);
@@ -506,6 +515,14 @@ k.scene("game", () => {
         stressBar.width = (stress / 100) * 300;
         distBar.width = Math.min((distanceTraveled / TARGET_DISTANCE) * 300, 300);
         timerText.text = `${Math.max(0, timeRemaining).toFixed(1)}s`;
+        
+        // 5. UI Incompleta: Alerta de Tempo piscando vermelho se menor que 20s
+        if (timeRemaining < 20) {
+            timerText.color = Math.floor(k.time() * 5) % 2 === 0 ? k.rgb(255, 50, 50) : k.rgb(255, 255, 255);
+        } else {
+            timerText.color = k.rgb(255, 255, 255);
+        }
+
         distText.text = `META: ${Math.floor(distanceTraveled)} / ${TARGET_DISTANCE} m`;
     });
 });
@@ -514,26 +531,53 @@ k.go("game");
 
 // ---- CENA DE GAME OVER / VITÓRIA ----
 k.scene("gameover", ({ win, reason }: { win: boolean, reason: string }) => {
+    // Fundo esmaecido cobrindo a tela
     k.add([
-        k.text(win ? "SUCESSO!" : "GAME OVER", { size: 64 }),
-        k.pos(k.width() / 2, k.height() / 2 - 60),
+        k.rect(k.width(), k.height()),
+        k.pos(0, 0),
+        k.color(10, 10, 15),
+        k.z(0)
+    ]);
+
+    // Painel Central
+    k.add([
+        k.rect(800, 400, { radius: 10 }),
+        k.pos(k.width() / 2, k.height() / 2),
         k.anchor("center"),
-        k.color(win ? k.rgb(50, 255, 50) : k.rgb(255, 50, 50))
+        k.color(30, 30, 35),
+        k.outline(4, win ? k.rgb(50, 255, 50) : k.rgb(255, 50, 50)),
+        k.z(1)
     ]);
 
     k.add([
-        k.text(reason, { size: 24 }),
-        k.pos(k.width() / 2, k.height() / 2 + 20),
+        k.text(win ? "SUCESSO!" : "GAME OVER", { size: 64, align: "center" }),
+        k.pos(k.width() / 2, k.height() / 2 - 80),
         k.anchor("center"),
-        k.color(200, 200, 200)
+        k.color(win ? k.rgb(50, 255, 50) : k.rgb(255, 50, 50)),
+        k.z(2)
     ]);
 
     k.add([
-        k.text("Pressione [R] para reiniciar", { size: 18 }),
-        k.pos(k.width() / 2, k.height() / 2 + 100),
+        k.text(reason, { size: 24, align: "center" }),
+        k.pos(k.width() / 2, k.height() / 2 + 10),
         k.anchor("center"),
-        k.color(255, 255, 255)
+        k.color(220, 220, 220),
+        k.z(2)
     ]);
 
-    k.onKeyPress("r", () => k.go("game"));
+    // Efeito piscante para o botão de restart
+    const restartText = k.add([
+        k.text("Pressione ESPAÇO ou R para reiniciar", { size: 20 }),
+        k.pos(k.width() / 2, k.height() / 2 + 120),
+        k.anchor("center"),
+        k.color(255, 255, 0),
+        k.opacity(1),
+        k.z(2)
+    ]);
+
+    restartText.onUpdate(() => {
+        restartText.opacity = Math.floor(k.time() * 3) % 2 === 0 ? 1 : 0.5;
+    });
+
+    k.onKeyPress(["r", "space"], () => k.go("game"));
 });
