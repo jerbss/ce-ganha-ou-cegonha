@@ -9,6 +9,9 @@ const k = kaplay({
 
 // Carregamento de Assets
 k.loadSprite("cenario", "./assets/64p_CenarioLoop.png");
+k.loadSprite("tela_inicial", "./assets/tela_inicial.png");
+
+// Usando no Kaplay a fonte importada no index.html
 
 k.scene("game", () => {
     // 1. Constantes da M�quina de Scroll
@@ -522,7 +525,78 @@ k.scene("game", () => {
     });
 });
 
-k.go("game");
+// ---- CENA DE MENU INICIAL ----
+k.scene("menu", () => {
+    k.add([
+        k.sprite("tela_inicial"),
+        k.pos(0, 0),
+    ]);
+
+    // Ajuste fino do Y para encaixar verticalmente no centro de cada listra bege
+    const options = [
+        { text: "Novo Jogo", y: 390, action: () => k.go("game") },
+        { text: "Configurações", y: 475, action: () => {} },
+        { text: "Instruções", y: 560, action: () => {} },
+        { text: "Sair", y: 645, action: () => {} }
+    ];
+
+    options.forEach(opt => {
+        // 1. Sombra projetada (Drop Shadow) para dar profundidade estética
+        const shadow = k.add([
+            k.text(opt.text, { size: 42, font: "Fredoka" }),
+            k.pos(104, opt.y + 5),
+            k.anchor("left"),
+            k.color(0, 0, 0),
+            k.opacity(0.4),
+            k.scale(1),
+            k.rotate(0),
+            k.z(1)
+        ]);
+
+        // 2. Texto Principal
+        const btn = k.add([
+            k.text(opt.text, { size: 42, font: "Fredoka" }),
+            k.pos(100, opt.y), 
+            k.anchor("left"),
+            k.color(255, 255, 255), // Texto branco para estourar no fundo
+            k.scale(1), 
+            k.rotate(0),
+            k.area(),
+            k.z(2),
+            "menu_btn"
+        ]);
+
+        btn.onClick(opt.action);
+
+        // Feedback super suculento (Juicy/GameFeel)
+        btn.onHoverUpdate(() => {
+            btn.color = k.rgb(255, 220, 50); // Fica um amarelo vivo charmoso
+            k.setCursor("pointer");
+            
+            // Leve crescimento e "wobble" (balanço) cartunesco
+            btn.scale = k.vec2(1.08);
+            btn.angle = k.wave(-2, 2, k.time() * 5);
+            
+            // A sombra acompanha o balanço
+            shadow.scale = btn.scale;
+            shadow.angle = btn.angle;
+        });
+
+        btn.onHoverEnd(() => {
+            btn.color = k.rgb(255, 255, 255); // Volta pro branco limpo
+            k.setCursor("default");
+            
+            // Reseta pro normal
+            btn.scale = k.vec2(1);
+            btn.angle = 0;
+            
+            shadow.scale = btn.scale;
+            shadow.angle = 0;
+        });
+    });
+});
+
+k.go("menu");
 
 // ---- CENA DE GAME OVER / VITÓRIA ----
 k.scene("gameover", ({ win, reason }: { win: boolean, reason: string }) => {
