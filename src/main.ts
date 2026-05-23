@@ -7,6 +7,9 @@ const k = kaplay({
     background: [18, 18, 20], // #121214 - Asfalto noturno
 });
 
+// Carregamento de Assets
+k.loadSprite("cenario", "./assets/64p_CenarioLoop.png");
+
 k.scene("game", () => {
     // 1. Constantes da M�quina de Scroll
     const BASE_SCROLL_SPEED = 400;
@@ -21,7 +24,7 @@ k.scene("game", () => {
 
     // 3. Sistema de Grid (5 Faixas)
     // 0: Pista Cima | 1: Corredor Cima | 2: Pista Meio | 3: Corredor Baixo | 4: Pista Baixo
-    const LANES = [250, 310, 370, 430, 490];
+    const LANES = [360, 420, 480, 540, 600];
     let currentLane = 2; // Come�a no meio
     let isChangingLane = false;
     let corridorTimer = 0;
@@ -60,43 +63,35 @@ k.scene("game", () => {
         }
     };
 
-    // Desenhar Fundo para visualiza��o clara do Asfalto
-    // Y: 210 a 530 (Altura = 320)
-    k.add([k.rect(1280, 320), k.pos(0, 210), k.color(35, 35, 37), k.z(0)]);
-
-    // Linhas Amarelas demarcando os corredores
-    let distanceToNextSpawn = 0;
-    const SPACING = 250; // Espa�amento perfeito independentemente da vel.
+    // ---- CENÁRIO DESLIZANTE (Camada 0) ----
+    const bg1 = k.add([
+        k.sprite("cenario"),
+        k.pos(0, k.height() / 2),
+        k.anchor("left"),
+        k.z(-100)
+    ]);
+    const bg2 = k.add([
+        k.sprite("cenario"),
+        k.pos(bg1.width || 1280, k.height() / 2),
+        k.anchor("left"),
+        k.z(-100)
+    ]);
 
     k.onUpdate(() => {
-        distanceToNextSpawn -= currentScrollSpeed * k.dt();
-        if (distanceToNextSpawn <= 0) {
-            // Corredor de Cima (Em Y: 306)
-            k.add([
-                k.rect(120, 4),
-                k.pos(k.width() + 50, 306),
-                k.anchor("center"),
-                k.color(255, 200, 0), // Amarelo
-                k.z(1),
-                "roadline"
-            ]);
-            // Corredor de Baixo (Em Y: 426)
-            k.add([
-                k.rect(120, 4),
-                k.pos(k.width() + 50, 426),
-                k.anchor("center"),
-                k.color(255, 200, 0), // Amarelo
-                k.z(1),
-                "roadline"
-            ]);
-            distanceToNextSpawn = SPACING;
-        }
-    });
+        // bg1.width pode estar indefinido logo no frame zero (se não usasse load antes).
+        // 1280 é a largura de fallback
+        const bgW = bg1.width || 1280;
+        
+        // bg2 gruda no final do bg1 (a posição X base dos 2 deve variar entre 0 e -1280 (largura))
+        bg1.move(-currentScrollSpeed, 0);
+        bg2.move(-currentScrollSpeed, 0);
 
-    // Deslocamento da rua
-    k.onUpdate("roadline", (line) => {
-        line.move(-currentScrollSpeed, 0);
-        if (line.pos.x < -200) line.destroy();
+        if (bg1.pos.x <= -bgW) {
+            bg1.pos.x = bg2.pos.x + bgW;
+        }
+        if (bg2.pos.x <= -bgW) {
+            bg2.pos.x = bg1.pos.x + bgW;
+        }
     });
 
     // 4. O Protagonista (A Moto)
