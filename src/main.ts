@@ -67,7 +67,7 @@ k.scene("game", () => {
     const CORRIDOR_GRACE = 0.9; // seconds
 
     // Estado do Jogo (MVP)
-    let stress = 0;
+    let paciencia = 100;
     let timeRemaining = 120;
     let distanceTraveled = 0;
     const TARGET_DISTANCE = 5000;
@@ -131,7 +131,7 @@ k.scene("game", () => {
     });
 
     // ---- HUD (UI Fixa) ----
-    k.add([
+    const rostoBebeUI = k.add([
         k.sprite("ui_feliz"),
         k.pos(20, 20),
         k.fixed(),
@@ -147,7 +147,7 @@ k.scene("game", () => {
     ]);
     
     // Preenchimento verde da barra
-    k.add([
+    const barraPacienciaUI = k.add([
         k.rect(332, 24, { radius: 6 }),
         k.pos(154, 48),
         k.color(46, 139, 87), // Verde
@@ -522,7 +522,7 @@ k.scene("game", () => {
     // ---- COLISÕES ----
     player.onCollide("pothole", () => {
         k.shake(4);
-        stress += 15;
+        paciencia -= 15;
         damageTimer = 0.5; // Dano centralizado
         const originalY = player.pos.y;
         k.tween(
@@ -543,7 +543,7 @@ k.scene("game", () => {
     });
 
     player.onCollide("car", (car: any) => {
-        stress += 20;
+        paciencia -= 20;
         damageTimer = 0.5; // Dano centralizado
         // Se o carro bateu NA TRASEIRA do player (veio de trás)
         if (car.pos.x < player.pos.x) {
@@ -620,14 +620,28 @@ k.scene("game", () => {
         currentScrollSpeed = k.lerp(currentScrollSpeed, targetSpeed, 2.0 * k.dt());
 
         // ---- REGRAS DE GAME DESIGN (MVP) ----
-        // Alta Velocidade sobe o estresse
+        // Alta Velocidade esgota a paciência
         if (currentScrollSpeed > 800) {
-            stress += 5 * k.dt();
+            paciencia -= 5 * k.dt();
         } else if (currentScrollSpeed < BASE_SCROLL_SPEED + 50) {
-            // 1. Mecânica Faltante: Frear/Ir devagar alivia o estresse
-            stress -= 4 * k.dt(); 
+            // Frear/Ir devagar alivia o estresse e a criança recupera a paciência
+            paciencia += 4 * k.dt(); 
         }
-        stress = Math.min(100, Math.max(0, stress));
+        paciencia = Math.min(100, Math.max(0, paciencia));
+
+        // Atualização Visual da Interface (Rosto e Barra)
+        barraPacienciaUI.width = (paciencia / 100) * 332;
+        
+        if (paciencia > 60) {
+            barraPacienciaUI.color = k.rgb(46, 139, 87); // Verde (Saudável)
+            rostoBebeUI.use(k.sprite("ui_feliz"));
+        } else if (paciencia > 30) {
+            barraPacienciaUI.color = k.rgb(218, 165, 32); // Amarelo/Laranja (Atenção)
+            rostoBebeUI.use(k.sprite("ui_ok"));
+        } else {
+            barraPacienciaUI.color = k.rgb(220, 20, 60); // Vermelho (Perigo)
+            rostoBebeUI.use(k.sprite("ui_surto"));
+        }
 
         // Tempo e Distância
         timeRemaining -= k.dt();
@@ -635,12 +649,12 @@ k.scene("game", () => {
 
         // Condições de Vitória e Derrota
         if (!isGameOver) {
-            if (stress >= 100) {
+            if (paciencia <= 0) {
                 isGameOver = true;
-                k.go("gameover", { win: false, reason: "O bebê chorou muito! Você foi denunciado." });
+                k.go("gameover", { win: false, reason: "A paciência esgotou! O bebê chorou muito e você perdeu." });
             } else if (distanceTraveled >= TARGET_DISTANCE) {
                 isGameOver = true;
-                k.go("gameover", { win: true, reason: "Entrega concluída! O bebê sobreviveu." });
+                k.go("gameover", { win: true, reason: "Entrega concluída! O bebê sobreviveu em paz." });
             } else if (timeRemaining <= 0) {
                 isGameOver = true;
                 k.go("gameover", { win: false, reason: "O tempo acabou! Entrega falhou (Geladeira)." });
@@ -653,8 +667,8 @@ k.scene("game", () => {
             player.hidden = Math.floor(k.time() * 20) % 2 === 0; // Blink of invulnerability/damage
         } else {
             player.hidden = false;
-            // Efeito de treme da tela se muito estressada (opcional, pode ficar)
-            if (stress > 70 && Math.random() < 0.1) {
+            // Efeito de treme da tela se a paciência estiver muito baixa (Perigo)
+            if (paciencia < 30 && Math.random() < 0.1) {
                 k.shake(1);
             }
         }
