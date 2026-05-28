@@ -10,8 +10,18 @@ const k = kaplay({
 // Carregamento de Assets
 k.loadSprite("cenario", "./assets/bg_cenario_loop.png");
 k.loadSprite("tela_inicial", "./assets/bg_menu_inicial.png");
+// Cutscenes e UI
+k.loadSprite("bg_cutscene_1", "./assets/bg_cutscene_1.png");
+k.loadSprite("bg_cutscene_2", "./assets/bg_cutscene_2.png");
+k.loadSprite("bg_cutscene_3", "./assets/bg_cutscene_3.png");
+k.loadSprite("bg_cutscene_4", "./assets/bg_cutscene_4.png");
+k.loadSprite("seta_direita", "./assets/ui_seta_direita.png");
+k.loadSprite("seta_esquerda", "./assets/ui_seta_esquerda.png");
 // Sprites Personagens e Elementos
 k.loadSprite("moto", "./assets/spr_moto_1.png");
+k.loadSprite("moto_2", "./assets/spr_moto_2.png");
+k.loadSprite("bg_vitoria", "./assets/bg_vitoria.png");
+k.loadSprite("bg_derrota", "./assets/bg_derrota.png");
 k.loadSprite("buraco", "./assets/spr_buraco.png");
 k.loadSprite("correio_1", "./assets/spr_correio_1.png");
 k.loadSprite("correio_2", "./assets/spr_correio_2.png");
@@ -123,11 +133,18 @@ k.scene("game", () => {
         k.sprite("moto"),
         k.pos(REST_X, LANES[currentLane] - MOTO_Y_OFFSET),
         k.anchor("center"),
-        // Diminuímos grandemente a hitbox no eixo Y (altura 24) para o jogador só bater se encostar de verdade
+        // Re-compensamos o deslocamento visual de -32 na hitbox (+32) para manter a logica da colisao intacta no centro da lane
         k.area({ shape: new k.Rect(k.vec2(0, 5 + MOTO_Y_OFFSET), 80, 24) }),
         k.z(0),
         "player"
     ]);
+
+    // Animação da Moto
+    let isMoto1 = true;
+    k.loop(0.15, () => {
+        isMoto1 = !isMoto1;
+        player.use(k.sprite(isMoto1 ? "moto" : "moto_2"));
+    });
 
     let rainActive = true;
 
@@ -549,6 +566,67 @@ k.scene("game", () => {
     });
 });
 
+// ---- CENA DE CUTSCENE (Narrativa) ----
+k.scene("cutscene", () => {
+    let currentSlide = 1;
+
+    // Fundo da Cutscene
+    const bg = k.add([
+        k.sprite("bg_cutscene_1"),
+        k.pos(0, 0),
+        k.z(0)
+    ]);
+
+    // Seta Esquerda
+    const leftArrow = k.add([
+        k.sprite("seta_esquerda"),
+        k.pos(50, k.height() / 2), // Centralizado Verticalmente
+        k.anchor("center"),
+        k.area(),
+        k.z(10),
+        "btn_left"
+    ]);
+
+    // Seta Direita
+    k.add([
+        k.sprite("seta_direita"),
+        k.pos(k.width() - 50, k.height() / 2), // Centralizado Verticalmente
+        k.anchor("center"),
+        k.area(),
+        k.z(10),
+        "btn_right"
+    ]);
+
+    // Ocultar seta esquerda na primeira tela
+    leftArrow.hidden = true;
+
+    // Lógica para avançar/retroceder interface
+    const updateSlide = () => {
+        bg.use(k.sprite("bg_cutscene_" + currentSlide));
+        leftArrow.hidden = (currentSlide === 1);
+    };
+
+    k.onClick("btn_right", () => {
+        if (currentSlide < 4) {
+            currentSlide++;
+            updateSlide();
+        } else {
+            // Fim da cutscene! Bora jogar!
+            k.go("game");
+        }
+    });
+
+    k.onClick("btn_left", () => {
+        if (currentSlide > 1) {
+            currentSlide--;
+            updateSlide();
+        } else {
+            // Retorna ao menu
+            k.go("menu");
+        }
+    });
+});
+
 // ---- CENA DE MENU INICIAL ----
 k.scene("menu", () => {
     k.add([
@@ -558,7 +636,7 @@ k.scene("menu", () => {
 
     // Ajuste fino do Y para encaixar verticalmente no centro de cada listra bege
     const options = [
-        { text: "Novo Jogo", y: 390, action: () => k.go("game") },
+        { text: "Novo Jogo", y: 390, action: () => k.go("cutscene") },
         { text: "Configurações", y: 475, action: () => {} },
         { text: "Instruções", y: 560, action: () => {} },
         { text: "Sair", y: 645, action: () => {} }
@@ -622,55 +700,29 @@ k.scene("menu", () => {
 
 k.go("menu");
 
-// ---- CENA DE GAME OVER / VITÓRIA ----
+// ---- CENA DE GAME OVER / VITORIA ----
 k.scene("gameover", ({ win, reason }: { win: boolean, reason: string }) => {
-    // Fundo esmaecido cobrindo a tela
+    
     k.add([
-        k.rect(k.width(), k.height()),
-        k.pos(0, 0),
-        k.color(10, 10, 15),
+        k.sprite(win ? "bg_vitoria" : "bg_derrota"),
+        k.pos(0,0),
         k.z(0)
     ]);
 
-    // Painel Central
-    k.add([
-        k.rect(800, 400, { radius: 10 }),
-        k.pos(k.width() / 2, k.height() / 2),
-        k.anchor("center"),
-        k.color(30, 30, 35),
-        k.outline(4, win ? k.rgb(50, 255, 50) : k.rgb(255, 50, 50)),
-        k.z(1)
-    ]);
-
-    k.add([
-        k.text(win ? "SUCESSO!" : "GAME OVER", { size: 64, align: "center" }),
-        k.pos(k.width() / 2, k.height() / 2 - 80),
-        k.anchor("center"),
-        k.color(win ? k.rgb(50, 255, 50) : k.rgb(255, 50, 50)),
-        k.z(2)
-    ]);
-
-    k.add([
-        k.text(reason, { size: 24, align: "center" }),
-        k.pos(k.width() / 2, k.height() / 2 + 10),
-        k.anchor("center"),
-        k.color(220, 220, 220),
-        k.z(2)
-    ]);
-
-    // Efeito piscante para o botão de restart
+    // Texto de Motivo + Reiniciar flutuando
     const restartText = k.add([
-        k.text("Pressione ESPAÇO ou R para reiniciar", { size: 20 }),
-        k.pos(k.width() / 2, k.height() / 2 + 120),
+        k.text(reason + "\n\nPressione ESPAÇO ou R para focar e voltar ao menu", { size: 32, font: "Fredoka", align: "center" }),
+        k.pos(k.width() / 2, k.height() - 90),
         k.anchor("center"),
-        k.color(255, 255, 0),
+        k.color(255, 255, 255),
         k.opacity(1),
+        k.outline(5, k.rgb(0, 0, 0)),
         k.z(2)
     ]);
 
     restartText.onUpdate(() => {
-        restartText.opacity = Math.floor(k.time() * 3) % 2 === 0 ? 1 : 0.5;
+        restartText.opacity = Math.floor(k.time() * 3) % 2 === 0 ? 1 : 0.4;
     });
 
-    k.onKeyPress(["r", "space"], () => k.go("game"));
+    k.onKeyPress(["r", "space"], () => k.go("menu"));
 });
