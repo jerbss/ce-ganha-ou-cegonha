@@ -8,8 +8,8 @@ const k = kaplay({
 });
 
 // Carregamento de Assets
-k.loadSprite("cenario", "./assets/64p_CenarioLoop.png");
-k.loadSprite("tela_inicial", "./assets/tela_inicial.png");
+k.loadSprite("cenario", "./assets/bg_cenario_loop.png");
+k.loadSprite("tela_inicial", "./assets/bg_menu_inicial.png");
 
 // Usando no Kaplay a fonte importada no index.html
 
