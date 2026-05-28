@@ -10,6 +10,24 @@ const k = kaplay({
 // Carregamento de Assets
 k.loadSprite("cenario", "./assets/bg_cenario_loop.png");
 k.loadSprite("tela_inicial", "./assets/bg_menu_inicial.png");
+// Sprites Personagens e Elementos
+k.loadSprite("moto", "./assets/spr_moto_1.png");
+k.loadSprite("buraco", "./assets/spr_buraco.png");
+k.loadSprite("correio_1", "./assets/spr_correio_1.png");
+k.loadSprite("correio_2", "./assets/spr_correio_2.png");
+// Veículos NPCs
+k.loadSprite("carro_azul", "./assets/spr_carro_azul.png");
+k.loadSprite("carro_verde", "./assets/spr_carro_verde.png");
+k.loadSprite("carro_vermelho", "./assets/spr_carro_vermelho.png");
+k.loadSprite("carro_laranja", "./assets/spr_carro_laranja.png");
+k.loadSprite("onibus_marrom", "./assets/spr_onibus_marrom.png");
+k.loadSprite("onibus_vermelho", "./assets/spr_onibus_vermelho.png");
+// UI e HUD
+k.loadSprite("ui_barra", "./assets/ui_barra_estresse.png");
+k.loadSprite("ui_caderno", "./assets/ui_caderno.png");
+k.loadSprite("ui_feliz", "./assets/ui_bebe_feliz.png");
+k.loadSprite("ui_ok", "./assets/ui_bebe_entediada.png");
+k.loadSprite("ui_surto", "./assets/ui_bebe_estressada.png");
 
 // Usando no Kaplay a fonte importada no index.html
 
@@ -97,13 +115,16 @@ k.scene("game", () => {
         }
     });
 
+    // Deslocamento visual da moto para alinhar a roda na linha tracejada do cenario
+    const MOTO_Y_OFFSET = 32;
+
     // 4. O Protagonista (A Moto)
     const player = k.add([
-        k.rect(54, 20, { radius: 3 }), // Esguia
-        k.pos(REST_X, LANES[currentLane]),
+        k.sprite("moto"),
+        k.pos(REST_X, LANES[currentLane] - MOTO_Y_OFFSET),
         k.anchor("center"),
-        k.color(0, 150, 255),
-        k.area(),
+        // Diminuímos grandemente a hitbox no eixo Y (altura 24) para o jogador só bater se encostar de verdade
+        k.area({ shape: new k.Rect(k.vec2(0, 5 + MOTO_Y_OFFSET), 80, 24) }),
         k.z(0),
         "player"
     ]);
@@ -152,16 +173,20 @@ k.scene("game", () => {
         let archetype;
 
         if (randVal < 0.33) {
-            // LENTO: Surge na direita. Cor cinza.
-            archetype = { type: 'LENTO', realSpeed: 250, color: k.rgb(150, 150, 150), startX: k.width() + 200 };
+            // LENTO: Surge na direita. Ônibus ou Veículo Grande.
+            const sps = ["onibus_marrom", "onibus_vermelho"];
+            const sp = sps[Math.floor(k.rand(0, sps.length))];
+            archetype = { type: 'LENTO', realSpeed: 250, sprite: sp, startX: k.width() + 200 };
         } else if (randVal < 0.66) {
-            // NORMAL: Surge na direita. Cor azul escuro.
-            archetype = { type: 'NORMAL', realSpeed: 500, color: k.rgb(30, 40, 100), startX: k.width() + 200 };
+            // NORMAL: Surge na direita. Veículo Médio.
+            const sps = ["carro_azul", "carro_verde", "carro_laranja"];
+            const sp = sps[Math.floor(k.rand(0, sps.length))];
+            archetype = { type: 'NORMAL', realSpeed: 500, sprite: sp, startX: k.width() + 200 };
         } else {
-            // APRESSADO: Surge da esquerda. Vermelho ou prata.
+            // APRESSADO: Surge de trás rÁpido. Carro Esportivo Vermelho.
             archetype = { type: 'APRESSADO', 
                           realSpeed: 950, 
-                          color: Math.random() > 0.5 ? k.rgb(200, 40, 40) : k.rgb(220, 220, 220), 
+                          sprite: "carro_vermelho", 
                           startX: -200 };
         }
 
@@ -173,11 +198,11 @@ k.scene("game", () => {
 
         const createCar = () => {
             const car = k.add([
-                k.rect(140, 40, { radius: 4 }),
+                k.sprite(archetype.sprite),
                 k.pos(archetype.startX, LANES[pickedLane]),
                 k.anchor("center"),
-                k.color(archetype.color),
-                k.area(),
+                // Hitbox mais fina (altura 28) para perdoar passagens justas entre as faixas
+                k.area({ shape: new k.Rect(k.vec2(0, 8), 120, 28) }),
                 k.z(0),
                 "car",
                 { realSpeed: archetype.realSpeed, lane: pickedLane, targetLane: null as number | null, slowedSince: 0, isChangingLane: false }
@@ -328,11 +353,11 @@ k.scene("game", () => {
         if (conflict) return;
 
         const pothole = k.add([
-            k.rect(40, 20, { radius: 10 }),
+            k.sprite("buraco"),
             k.pos(k.width() + 120, laneY),
             k.anchor("center"),
-            k.color(20, 20, 22),
-            k.area(),
+            // Buraco tem hitbox menor de altura 16
+            k.area({ shape: new k.Rect(k.vec2(0, 0), 40, 16) }),
             k.z(0),
             "pothole"
         ]);
@@ -409,7 +434,7 @@ k.scene("game", () => {
             
             k.tween(
                 player.pos.y, 
-                LANES[currentLane], 
+                LANES[currentLane] - MOTO_Y_OFFSET, 
                 laneTweenDuration, 
                 (val) => player.pos.y = val, 
                 k.easings.easeOutQuad
@@ -424,7 +449,7 @@ k.scene("game", () => {
 
     // 6. Sistema de Motor (Acelerar/Freio) e velocidade implac�vel global
     k.onUpdate(() => {
-        player.z = Math.floor(player.pos.y);
+        player.z = Math.floor(player.pos.y + MOTO_Y_OFFSET);
 
         let targetX = REST_X;
         let targetSpeed = BASE_SCROLL_SPEED;
@@ -487,13 +512,12 @@ k.scene("game", () => {
         // 6. Feedback Visual Centralizado
         if (damageTimer > 0) {
             damageTimer -= k.dt();
-            player.color = k.rgb(255, 50, 50); // Pisca vermelho no dano
+            player.hidden = Math.floor(k.time() * 20) % 2 === 0; // Blink of invulnerability/damage
         } else {
-            if (stress > 70) {
-                if (Math.random() < 0.1) k.shake(1);
-                player.color = Math.floor(k.time() * 10) % 2 === 0 ? k.rgb(255, 255, 0) : k.rgb(0, 150, 255);
-            } else {
-                player.color = k.rgb(0, 150, 255); // Cor normal
+            player.hidden = false;
+            // Efeito de treme da tela se muito estressada (opcional, pode ficar)
+            if (stress > 70 && Math.random() < 0.1) {
+                k.shake(1);
             }
         }
     });
