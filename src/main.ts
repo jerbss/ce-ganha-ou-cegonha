@@ -30,14 +30,19 @@ k.loadSprite("carro_azul", "./assets/spr_carro_azul.png");
 k.loadSprite("carro_verde", "./assets/spr_carro_verde.png");
 k.loadSprite("carro_vermelho", "./assets/spr_carro_vermelho.png");
 k.loadSprite("carro_laranja", "./assets/spr_carro_laranja.png");
+k.loadSprite("carro_marrom", "./assets/spr_carro_marrom.png");
 k.loadSprite("onibus_marrom", "./assets/spr_onibus_marrom.png");
 k.loadSprite("onibus_vermelho", "./assets/spr_onibus_vermelho.png");
+k.loadSprite("onibus_azul", "./assets/spr_onibus_azul.png");
+k.loadSprite("onibus_laranja", "./assets/spr_onibus_laranja.png");
+k.loadSprite("onibus_verde", "./assets/spr_onibus_verde.png");
 // UI e HUD
 k.loadSprite("ui_barra", "./assets/ui_barra_estresse.png");
 k.loadSprite("ui_caderno", "./assets/ui_caderno.png");
 k.loadSprite("ui_feliz", "./assets/ui_bebe_feliz.png");
 k.loadSprite("ui_ok", "./assets/ui_bebe_entediada.png");
 k.loadSprite("ui_surto", "./assets/ui_bebe_estressada.png");
+k.loadSprite("seta_correio", "./assets/spr_seta_correio.png");
 
 // Usando no Kaplay a fonte importada no index.html
 
@@ -125,6 +130,123 @@ k.scene("game", () => {
         }
     });
 
+    // ---- HUD (UI Fixa) ----
+    k.add([
+        k.sprite("ui_feliz"),
+        k.pos(20, 20),
+        k.fixed(),
+        k.z(1000)
+    ]);
+    
+    k.add([
+        k.rect(340, 32, { radius: 8 }),
+        k.pos(150, 44),
+        k.color(20, 20, 20),
+        k.fixed(),
+        k.z(1000)
+    ]);
+    
+    // Preenchimento verde da barra
+    k.add([
+        k.rect(332, 24, { radius: 6 }),
+        k.pos(154, 48),
+        k.color(46, 139, 87), // Verde
+        k.fixed(),
+        k.z(1001)
+    ]);
+    
+    // Caderno (Topo Direito)
+    k.add([
+        k.sprite("ui_caderno"),
+        k.pos(k.width() - 20, 20),
+        k.anchor("topright"),
+        k.fixed(),
+        k.z(1000)
+    ]);
+
+    // ---- SPAWNER DE CAIXAS DE CORREIO (Sincronizado com o Loop do Cenário) ----
+    // bg_cenario_loop.png tem 2560px com 40 blocos (64px cada)
+    // Padrão: Claro, Escuro, Claro, Escuro, ... Escuro
+    // Blocos escuros: a cada 128px (1 claro + 1 escuro)
+    
+    let toggleSpriteCorreio = true;
+    const DIST_ENTRE_CORREIOS = 128; // Um par de blocos (claro + escuro)
+    let distAccumCorreio = 0;
+    
+    const spawnCorreioPair = (startX?: number) => {
+        // Se x não for passado, calcula a posição exata baseada na borda direita menos o excesso de percurso
+        const xPos = startX !== undefined ? startX : k.width() + 96 - distAccumCorreio;
+        
+        // CORREIO SUPERIOR (Topo da Calçada)
+        const spriteSup = toggleSpriteCorreio ? "correio_1" : "correio_2";
+        const yPosSup = 236; // 300 - 64 (Topo da calçada corrigido)
+        
+        const correioSup = k.add([
+            k.sprite(spriteSup),
+            k.pos(xPos, yPosSup),
+            k.anchor("center"),
+            k.z(-10), // Atrás dos pedestres e carros
+            "correio"
+        ]);
+        
+        correioSup.onUpdate(() => {
+            correioSup.move(-currentScrollSpeed, 0);
+            if (correioSup.pos.x < -100) correioSup.destroy();
+        });
+        
+        // CORREIO INFERIOR (Base da Calçada)
+        const spriteInf = toggleSpriteCorreio ? "correio_2" : "correio_1"; // Sprite alternado
+        const yPosInf = 680; // Base da calçada
+        
+        const correioInf = k.add([
+            k.sprite(spriteInf),
+            k.pos(xPos, yPosInf),
+            k.anchor("center"),
+            k.z(100), // À frente de tudo na pista
+            "correio"
+        ]);
+        
+        correioInf.onUpdate(() => {
+            correioInf.move(-currentScrollSpeed, 0);
+            if (correioInf.pos.x < -100) correioInf.destroy();
+        });
+
+        toggleSpriteCorreio = !toggleSpriteCorreio;
+        
+        // Gerar seta com 30% chance
+        if (k.chance(0.3)) {
+            const isSetaSup = k.chance(0.5);
+            const ySeta = isSetaSup ? yPosSup - 55 : yPosInf - 55;
+            const zSeta = isSetaSup ? -9 : 101;
+
+            const seta = k.add([
+                k.sprite("seta_correio"),
+                k.pos(xPos, ySeta), 
+                k.anchor("center"),
+                k.z(zSeta),
+                "seta"
+            ]);
+            
+            seta.onUpdate(() => {
+                seta.move(-currentScrollSpeed, Math.sin(k.time() * 5) * 10);
+                if (seta.pos.x < -100) seta.destroy();
+            });
+        }
+    };
+
+    // Preenchendo a tela no primeiro frame (Sincronizado perfeitamente! O centro do bloco escuro começa em 96px e a tela tem 1280px)
+    for (let x = 96; x <= k.width() + 128; x += DIST_ENTRE_CORREIOS) {
+        spawnCorreioPair(x);
+    }
+
+    k.onUpdate(() => {
+        distAccumCorreio += currentScrollSpeed * k.dt();
+        while (distAccumCorreio >= DIST_ENTRE_CORREIOS) { 
+            distAccumCorreio -= DIST_ENTRE_CORREIOS;
+            spawnCorreioPair();
+        }
+    });
+
     // Deslocamento visual da moto para alinhar a roda na linha tracejada do cenario
     const MOTO_Y_OFFSET = 32;
 
@@ -189,22 +311,21 @@ k.scene("game", () => {
         const randVal = Math.random();
         let archetype;
 
+        const todosOsOnibus = ["onibus_marrom", "onibus_vermelho", "onibus_azul", "onibus_laranja", "onibus_verde"];
+        const todosOsCarros = ["carro_azul", "carro_verde", "carro_vermelho", "carro_laranja", "carro_marrom"];
+
         if (randVal < 0.33) {
-            // LENTO: Surge na direita. Ônibus ou Veículo Grande.
-            const sps = ["onibus_marrom", "onibus_vermelho"];
-            const sp = sps[Math.floor(k.rand(0, sps.length))];
+            // LENTO: Surge na direita. Ônibus.
+            const sp = todosOsOnibus[Math.floor(k.rand(0, todosOsOnibus.length))];
             archetype = { type: 'LENTO', realSpeed: 250, sprite: sp, startX: k.width() + 200 };
         } else if (randVal < 0.66) {
-            // NORMAL: Surge na direita. Veículo Médio.
-            const sps = ["carro_azul", "carro_verde", "carro_laranja"];
-            const sp = sps[Math.floor(k.rand(0, sps.length))];
+            // NORMAL: Surge na direita. Carro MÃ©dio.
+            const sp = todosOsCarros[Math.floor(k.rand(0, todosOsCarros.length))];
             archetype = { type: 'NORMAL', realSpeed: 500, sprite: sp, startX: k.width() + 200 };
         } else {
-            // APRESSADO: Surge de trás rÁpido. Carro Esportivo Vermelho.
-            archetype = { type: 'APRESSADO', 
-                          realSpeed: 950, 
-                          sprite: "carro_vermelho", 
-                          startX: -200 };
+            // APRESSADO: Surge de trÃ¡s rÃ¡pido. Carro Esportivo.
+            const sp = todosOsCarros[Math.floor(k.rand(0, todosOsCarros.length))];
+            archetype = { type: 'APRESSADO', realSpeed: 950, sprite: sp, startX: -200 };
         }
 
         // Evitar spawn sobreposto: verificar presença de carro perto da posição de spawn na mesma faixa
@@ -447,7 +568,7 @@ k.scene("game", () => {
         if (nextLane >= 0 && nextLane < LANES.length) {
             isChangingLane = true;
             currentLane = nextLane;
-            const laneTweenDuration = rainActive ? 0.144 : 0.12;
+            const laneTweenDuration = 0.12;
             
             k.tween(
                 player.pos.y, 
@@ -539,31 +660,6 @@ k.scene("game", () => {
         }
     });
 
-    // ---- HUD (MÉDIA FIDELIDADE) ----
-    k.add([ k.rect(300, 20), k.pos(20, 30), k.color(50, 50, 50), k.fixed(), k.z(100) ]);
-    const stressBar = k.add([ k.rect(0, 20), k.pos(20, 30), k.color(255, 50, 50), k.fixed(), k.z(101) ]);
-    k.add([ k.text("ESTRESSE: BEBÊ", { size: 16 }), k.pos(20, 10), k.color(255, 255, 255), k.fixed(), k.z(101) ]);
-
-    const timerText = k.add([ k.text("120.0s", { size: 32 }), k.pos(k.width()/2, 30), k.anchor("center"), k.color(255, 255, 255), k.fixed(), k.z(101) ]);
-
-    k.add([ k.rect(300, 20), k.pos(k.width() - 320, 30), k.color(50, 50, 50), k.fixed(), k.z(100) ]);
-    const distBar = k.add([ k.rect(0, 20), k.pos(k.width() - 320, 30), k.color(50, 255, 50), k.fixed(), k.z(101) ]);
-    const distText = k.add([ k.text("META: 0 / 5000 m", { size: 16 }), k.pos(k.width() - 320, 10), k.color(255, 255, 255), k.fixed(), k.z(101) ]);
-
-    k.onUpdate(() => {
-        stressBar.width = (stress / 100) * 300;
-        distBar.width = Math.min((distanceTraveled / TARGET_DISTANCE) * 300, 300);
-        timerText.text = `${Math.max(0, timeRemaining).toFixed(1)}s`;
-        
-        // 5. UI Incompleta: Alerta de Tempo piscando vermelho se menor que 20s
-        if (timeRemaining < 20) {
-            timerText.color = Math.floor(k.time() * 5) % 2 === 0 ? k.rgb(255, 50, 50) : k.rgb(255, 255, 255);
-        } else {
-            timerText.color = k.rgb(255, 255, 255);
-        }
-
-        distText.text = `META: ${Math.floor(distanceTraveled)} / ${TARGET_DISTANCE} m`;
-    });
 });
 
 // ---- CENA DE CUTSCENE (Narrativa) ----
