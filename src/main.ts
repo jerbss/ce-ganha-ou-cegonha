@@ -83,6 +83,15 @@ k.loadSprite("bg_menu_pausa", "./assets/bg_menu_pausa.png");
 k.loadSprite("bg_instrucoes", "./assets/bg_instrucoes.png");
 k.loadSprite("bg_configuracoes", "./assets/bg_configuracoes.png");
 
+// ---- ÁUDIO: Carregamento dos BGMs ----
+k.loadSound("bgm_menu",      "./assets/tela-inicial.mp3");
+k.loadSound("bgm_gameplay",  "./assets/gameplay.mp3");
+k.loadSound("bgm_cutscene",  "./assets/cutscene.ogg");
+k.loadSound("jingle_vitoria","./assets/vitoria.mp3");
+k.loadSound("jingle_derrota","./assets/derrota.wav");
+k.loadSound("sfx_hover", "./assets/rollover-menu.wav");
+k.loadSound("sfx_click", "./assets/click-botao.wav");
+
 // Usando no Kaplay a fonte importada no index.html
 
 // ---- ESTADO GLOBAL ----
@@ -90,8 +99,63 @@ let isGamePaused = false;
 let globalVolume = 1.0;
 k.volume(globalVolume);
 
+// ---- GERENCIADOR DE BGM ----
+// Mantém referência da música tocando e evita sobreposição
+let _currentBGM: any = null;
+let _currentBGMKey: string | null = null;
+
+const playBGM = (key: string, loop = true, volume = 0.25) => {
+    // Não reinicia se já está tocando a mesma faixa
+    if (_currentBGMKey === key && _currentBGM) return;
+    // Para a faixa anterior
+    if (_currentBGM) {
+        try { _currentBGM.stop(); } catch (e) {}
+    }
+    _currentBGM = k.play(key, { loop, volume });
+    _currentBGMKey = key;
+};
+
+const stopBGM = () => {
+    if (_currentBGM) {
+        try { _currentBGM.stop(); } catch (e) {}
+        _currentBGM = null;
+        _currentBGMKey = null;
+    }
+};
+
+// Abafa a BGM durante a pausa (simula efeito de "mundo parado")
+const muffleBGM = (muffled: boolean) => {
+    if (!_currentBGM) return;
+    _currentBGM.volume = muffled ? 0.08 : 0.25;
+};
+
+export const isFullscreenActive = () => {
+    return !!(document.fullscreenElement || (document as any).webkitFullscreenElement);
+};
+
+export const toggleFullscreen = (enable: boolean) => {
+    if (enable) {
+        const docEl = document.documentElement;
+        if (docEl.requestFullscreen) {
+            docEl.requestFullscreen();
+        } else if ((docEl as any).webkitRequestFullscreen) {
+            (docEl as any).webkitRequestFullscreen();
+        }
+    } else {
+        if (document.exitFullscreen) {
+            document.exitFullscreen();
+        } else if ((document as any).webkitExitFullscreen) {
+            (document as any).webkitExitFullscreen();
+        }
+    }
+    // Force resize recalculation in browser
+    setTimeout(() => {
+        window.dispatchEvent(new Event('resize'));
+    }, 100);
+};
+
 // ---- COMPONENTES REUTILIZÁVEIS ----
-export function createStandardButton(text: string, pos: any, action: () => void) {
+export function createStandardButton(text: string, pos: any, action: () => void, zIndex: number = 100) {
     const btnWidth = 320;
     const btnHeight = 60;
     const btnRadius = 30;
@@ -101,7 +165,7 @@ export function createStandardButton(text: string, pos: any, action: () => void)
         k.pos(pos),
         k.area({ shape: new k.Rect(k.vec2(0, 0), btnWidth, btnHeight) }),
         k.anchor("center"),
-        k.z(100),
+        k.z(zIndex),
         "standard_btn"
     ]);
 
@@ -136,6 +200,9 @@ export function createStandardButton(text: string, pos: any, action: () => void)
 
     // Efeitos de Hover
     btn.onHover(() => {
+        if (plate.color.r !== 53) { // Toca o som apenas na transição inicial de hover
+            k.play("sfx_hover", { volume: 0.5 });
+        }
         plate.color = k.rgb(53, 181, 235); // Azul celeste ao passar o mouse
         k.setCursor("pointer");
     });
@@ -147,6 +214,7 @@ export function createStandardButton(text: string, pos: any, action: () => void)
 
     // Ação de Clique
     btn.onClick(() => {
+        k.play("sfx_click", { volume: 0.6 });
         // Efeito de "pressão"
         plate.pos.y = 4;
         label.pos.y = 4;
@@ -162,7 +230,10 @@ export function createStandardButton(text: string, pos: any, action: () => void)
 }
 
 k.scene("game", () => {
-    // 1. Constantes da M�quina de Scroll
+    // ---- BGM DA GAMEPLAY ----
+    playBGM("bgm_gameplay");
+
+    // 1. Constantes da Máquina de Scroll
     const BASE_SCROLL_SPEED = 400;
     const ACCEL_SCROLL_SPEED = 1000;
     const BRAKE_SCROLL_SPEED = 150;
@@ -306,6 +377,7 @@ k.scene("game", () => {
         ]);
         
         correioSup.onUpdate(() => {
+            if (isGamePaused) return;
             correioSup.move(-currentScrollSpeed, 0);
             if (correioSup.pos.x < -100) correioSup.destroy();
         });
@@ -323,6 +395,7 @@ k.scene("game", () => {
         ]);
         
         correioInf.onUpdate(() => {
+            if (isGamePaused) return;
             correioInf.move(-currentScrollSpeed, 0);
             if (correioInf.pos.x < -100) correioInf.destroy();
         });
@@ -344,6 +417,7 @@ k.scene("game", () => {
             ]);
             
             seta.onUpdate(() => {
+                if (isGamePaused) return;
                 seta.move(-currentScrollSpeed, Math.sin(k.time() * 5) * 10);
                 if (seta.pos.x < -100) seta.destroy();
             });
@@ -385,40 +459,7 @@ k.scene("game", () => {
         player.use(k.sprite(isMoto1 ? "moto" : "moto_2"));
     });
 
-    let rainActive = true;
 
-    const spawnRainDrop = () => {
-        if (!rainActive) return;
-
-        const drop = k.add([
-            k.rect(2, 14, { radius: DESIGN.radius.small }),
-            k.pos(k.rand(0, k.width()), k.rand(-40, 0)),
-            k.anchor("center"),
-            k.color(90, 150, 255),
-            k.opacity(0.65),
-            k.z(60),
-            "rain"
-        ]);
-
-        drop.onUpdate(() => {
-            drop.move(-currentScrollSpeed * 0.15, 520 * k.dt());
-            drop.pos.x -= 220 * k.dt();
-            if (drop.pos.y > k.height() + 30) {
-                drop.destroy();
-            }
-        });
-    };
-
-    const loopRain = () => {
-        k.wait(k.rand(0.04, 0.12), () => {
-            if (k.get("rain").length < 80) {
-                const dropsToSpawn = Math.floor(k.rand(2, 5));
-                for (let i = 0; i < dropsToSpawn; i++) spawnRainDrop();
-            }
-            loopRain();
-        });
-    };
-    loopRain();
 
     // ---- SISTEMA DE TRÁFEGO (NPCs) ----
     const spawnCar = () => {
@@ -467,6 +508,7 @@ k.scene("game", () => {
             addCarToLane(pickedLane, car);
 
             car.onUpdate(() => {
+                if (isGamePaused) return;
                 car.z = Math.floor(car.pos.y);
 
                 // Apenas checar carros na mesma faixa (otimização)
@@ -573,6 +615,7 @@ k.scene("game", () => {
             (indicator as any)._blinkElapsed = 0;
             const blinkDuration = 0.08;
             indicator.onUpdate(() => {
+                if (isGamePaused) return;
                 (indicator as any)._blinkElapsed += k.dt();
                 indicator.hidden = Math.floor((indicator as any)._blinkElapsed / blinkDuration) % 2 === 0;
                 if ((indicator as any)._blinkElapsed >= 0.8) {
@@ -618,6 +661,7 @@ k.scene("game", () => {
         ]);
 
         pothole.onUpdate(() => {
+            if (isGamePaused) return;
             pothole.z = Math.floor(pothole.pos.y);
             pothole.move(-currentScrollSpeed, 0);
             if (pothole.pos.x < -200) {
@@ -638,6 +682,7 @@ k.scene("game", () => {
 
     // ---- COLISÕES ----
     player.onCollide("pothole", () => {
+        if (isGamePaused) return;
         k.shake(4);
         paciencia -= 15;
         damageTimer = 0.5; // Dano centralizado
@@ -660,6 +705,7 @@ k.scene("game", () => {
     });
 
     player.onCollide("car", (car: any) => {
+        if (isGamePaused) return;
         paciencia -= 20;
         damageTimer = 0.5; // Dano centralizado
         // Se o carro bateu NA TRASEIRA do player (veio de trás)
@@ -703,51 +749,429 @@ k.scene("game", () => {
     k.onKeyPress(["down", "s"], () => moveLane(1));
 
     // Pause / Overlay control (toggle com tecla ESC)
+    // Pause / Overlay control (toggle com tecla ESC ou P)
     let isPaused = false;
     let pauseOverlay: any = null;
-    let pauseContinueBtn: any = null;
-    let pauseMenuBtn: any = null;
+    let pauseCloseBtn: any = null;
+    let pauseUIObjects: any[] = [];
+
+    const showMainMenu = () => {
+        pauseUIObjects.forEach(obj => obj.destroy && obj.destroy());
+        pauseUIObjects = [];
+
+        const btnConfig = createStandardButton("Configurações", k.vec2(k.width() / 2, 300), () => {
+            showConfigMenu();
+        }, 2001);
+
+        const btnInstr = createStandardButton("Instruções", k.vec2(k.width() / 2, 380), () => {
+            showInstructionsMenu();
+        }, 2001);
+
+        const btnRestart = createStandardButton("Reiniciar Fase", k.vec2(k.width() / 2, 460), () => {
+            togglePause();
+            k.go("game");
+        }, 2001);
+
+        const btnQuit = createStandardButton("Sair do Jogo", k.vec2(k.width() / 2, 540), () => {
+            togglePause();
+            k.go("menu");
+        }, 2001);
+
+        pauseUIObjects.push(btnConfig, btnInstr, btnRestart, btnQuit);
+    };
+
+    const showConfigMenu = () => {
+        if (pauseCloseBtn) pauseCloseBtn.hidden = true;
+        pauseUIObjects.forEach(obj => obj.destroy && obj.destroy());
+        pauseUIObjects = [];
+
+        // 1. Labels
+        const lblVolume = k.add([
+            k.text("Volume", { size: 32, font: "Fredoka" }),
+            k.pos(370, 300),
+            k.anchor("left"),
+            k.color(DESIGN.colors.menuText),
+            k.z(2001)
+        ]);
+
+        const lblFullscreen = k.add([
+            k.text("Tela Cheia", { size: 32, font: "Fredoka" }),
+            k.pos(370, 400),
+            k.anchor("left"),
+            k.color(DESIGN.colors.menuText),
+            k.z(2001)
+        ]);
+
+        // 2. Volume Slider
+        const sliderLeft = 570;
+        const sliderWidth = 300;
+        const sliderY = 300;
+
+        const track = k.add([
+            k.rect(sliderWidth, 16, { radius: 8 }),
+            k.pos(sliderLeft, sliderY),
+            k.color(DESIGN.colors.menuPlateOutline),
+            k.outline(3, DESIGN.colors.menuPlateOutline),
+            k.area(),
+            k.anchor("left"),
+            k.z(2001)
+        ]);
+
+        const fill = k.add([
+            k.rect(sliderWidth * globalVolume, 16, { radius: 8 }),
+            k.pos(sliderLeft, sliderY),
+            k.color(DESIGN.colors.primary),
+            k.anchor("left"),
+            k.z(2002)
+        ]);
+
+        const handle = k.add([
+            k.circle(14),
+            k.pos(sliderLeft + sliderWidth * globalVolume, sliderY),
+            k.color(DESIGN.colors.menuPlate),
+            k.outline(3, DESIGN.colors.menuPlateOutline),
+            k.area(),
+            k.anchor("center"),
+            k.z(2003)
+        ]);
+
+        const volumeLabel = k.add([
+            k.text(Math.round(globalVolume * 100) + "%", {
+                size: 24,
+                font: "Fredoka",
+            }),
+            k.pos(sliderLeft + sliderWidth + 20, sliderY),
+            k.anchor("left"),
+            k.color(DESIGN.colors.menuText),
+            k.z(2002)
+        ]);
+
+        let isDraggingVolume = false;
+
+        const updateVolumeFromMouse = () => {
+            const mouseX = k.mousePos().x;
+            let pct = (mouseX - sliderLeft) / sliderWidth;
+            pct = Math.max(0, Math.min(1, pct));
+            globalVolume = pct;
+            k.volume(globalVolume);
+            
+            fill.width = sliderWidth * globalVolume;
+            handle.pos.x = sliderLeft + sliderWidth * globalVolume;
+            volumeLabel.text = Math.round(globalVolume * 100) + "%";
+        };
+
+        const ev1 = track.onClick(() => {
+            updateVolumeFromMouse();
+        });
+
+        const ev2 = handle.onHover(() => {
+            k.play("sfx_hover", { volume: 0.5 });
+            k.setCursor("pointer");
+        });
+        const ev3 = handle.onHoverEnd(() => {
+            k.setCursor("default");
+        });
+
+        const ev4 = k.onMouseDown(() => {
+            if (track.isHovering() || handle.isHovering()) {
+                isDraggingVolume = true;
+            }
+        });
+
+        const ev5 = k.onMouseRelease(() => {
+            isDraggingVolume = false;
+        });
+
+        const ev6 = k.onUpdate(() => {
+            if (isDraggingVolume) {
+                updateVolumeFromMouse();
+            }
+        });
+
+        // 3. Fullscreen Buttons
+        let isFull = isFullscreenActive();
+        const btnWidth = 110;
+        const btnHeight = 50;
+        const btnRadius = 25;
+
+        const btnSim = k.add([
+            k.pos(650, 400),
+            k.area({ shape: new k.Rect(k.vec2(0, 0), btnWidth, btnHeight) }),
+            k.anchor("center"),
+            k.z(2001),
+            "toggle_btn"
+        ]);
+
+        const shadowSim = btnSim.add([
+            k.rect(btnWidth, btnHeight, { radius: btnRadius }),
+            k.pos(0, 6),
+            k.anchor("center"),
+            k.color(),
+        ]);
+
+        const plateSim = btnSim.add([
+            k.rect(btnWidth, btnHeight, { radius: btnRadius }),
+            k.pos(0, 0),
+            k.anchor("center"),
+            k.outline(3, DESIGN.colors.menuPlateOutline),
+            k.color(),
+        ]);
+
+        const labelSim = btnSim.add([
+            k.text("Sim", { size: 24, font: "Fredoka", align: "center" }),
+            k.pos(0, 0),
+            k.anchor("center"),
+            k.outline(2, k.rgb(255, 255, 255)),
+            k.color(),
+        ]);
+
+        const btnNao = k.add([
+            k.pos(780, 400),
+            k.area({ shape: new k.Rect(k.vec2(0, 0), btnWidth, btnHeight) }),
+            k.anchor("center"),
+            k.z(2001),
+            "toggle_btn"
+        ]);
+
+        const shadowNao = btnNao.add([
+            k.rect(btnWidth, btnHeight, { radius: btnRadius }),
+            k.pos(0, 6),
+            k.anchor("center"),
+            k.color(),
+        ]);
+
+        const plateNao = btnNao.add([
+            k.rect(btnWidth, btnHeight, { radius: btnRadius }),
+            k.pos(0, 0),
+            k.anchor("center"),
+            k.outline(3, DESIGN.colors.menuPlateOutline),
+            k.color(),
+        ]);
+
+        const labelNao = btnNao.add([
+            k.text("Não", { size: 24, font: "Fredoka", align: "center" }),
+            k.pos(0, 0),
+            k.anchor("center"),
+            k.outline(2, k.rgb(255, 255, 255)),
+            k.color(),
+        ]);
+
+        const refreshButtons = () => {
+            const full = isFullscreenActive();
+            shadowSim.color = full ? k.rgb(30, 112, 128) : k.rgb(133, 115, 102);
+            plateSim.color = full ? k.rgb(74, 229, 226) : k.rgb(194, 180, 169);
+            labelSim.color = full ? k.rgb(0, 0, 0) : k.rgb(100, 90, 85);
+
+            shadowNao.color = !full ? k.rgb(30, 112, 128) : k.rgb(133, 115, 102);
+            plateNao.color = !full ? k.rgb(74, 229, 226) : k.rgb(194, 180, 169);
+            labelNao.color = !full ? k.rgb(0, 0, 0) : k.rgb(100, 90, 85);
+        };
+
+        refreshButtons();
+
+        const ev7 = btnSim.onClick(() => {
+            k.play("sfx_click", { volume: 0.6 });
+            plateSim.pos.y = 3;
+            labelSim.pos.y = 3;
+            k.wait(0.1, () => {
+                plateSim.pos.y = 0;
+                labelSim.pos.y = 0;
+                toggleFullscreen(true);
+                k.wait(0.1, () => {
+                    refreshButtons();
+                });
+            });
+        });
+
+        const ev8 = btnNao.onClick(() => {
+            k.play("sfx_click", { volume: 0.6 });
+            plateNao.pos.y = 3;
+            labelNao.pos.y = 3;
+            k.wait(0.1, () => {
+                plateNao.pos.y = 0;
+                labelNao.pos.y = 0;
+                toggleFullscreen(false);
+                k.wait(0.1, () => {
+                    refreshButtons();
+                });
+            });
+        });
+
+        const ev9 = btnSim.onHover(() => {
+            if (!isFullscreenActive()) {
+                k.play("sfx_hover", { volume: 0.5 });
+            }
+            k.setCursor("pointer");
+            if (!isFullscreenActive()) {
+                plateSim.color = k.rgb(214, 200, 189);
+            } else {
+                plateSim.color = k.rgb(53, 181, 235);
+            }
+        });
+        const ev10 = btnSim.onHoverEnd(() => {
+            k.setCursor("default");
+            refreshButtons();
+        });
+
+        const ev11 = btnNao.onHover(() => {
+            if (isFullscreenActive()) {
+                k.play("sfx_hover", { volume: 0.5 });
+            }
+            k.setCursor("pointer");
+            if (isFullscreenActive()) {
+                plateNao.color = k.rgb(214, 200, 189);
+            } else {
+                plateNao.color = k.rgb(53, 181, 235);
+            }
+        });
+        const ev12 = btnNao.onHoverEnd(() => {
+            k.setCursor("default");
+            refreshButtons();
+        });
+
+        const ev13 = btnSim.onUpdate(() => {
+            const currentFull = isFullscreenActive();
+            if (isFull !== currentFull) {
+                isFull = currentFull;
+                refreshButtons();
+            }
+        });
+
+        const onFullScreenChange = () => {
+            isFull = isFullscreenActive();
+            refreshButtons();
+            setTimeout(() => {
+                window.dispatchEvent(new Event('resize'));
+            }, 150);
+        };
+        document.addEventListener("fullscreenchange", onFullScreenChange);
+        document.addEventListener("webkitfullscreenchange", onFullScreenChange);
+
+        const btnVoltar = createStandardButton("Voltar", k.vec2(k.width() / 2, 520), () => {
+            ev1.cancel(); ev2.cancel(); ev3.cancel(); ev4.cancel(); ev5.cancel(); ev6.cancel();
+            ev7.cancel(); ev8.cancel(); ev9.cancel(); ev10.cancel(); ev11.cancel(); ev12.cancel(); ev13.cancel();
+            document.removeEventListener("fullscreenchange", onFullScreenChange);
+            document.removeEventListener("webkitfullscreenchange", onFullScreenChange);
+            if (pauseCloseBtn) pauseCloseBtn.hidden = false;
+            showMainMenu();
+        }, 2001);
+
+        pauseUIObjects.push(
+            lblVolume, lblFullscreen, track, fill, handle, volumeLabel,
+            btnSim, btnNao, btnVoltar
+        );
+    };
+
+    const showInstructionsMenu = () => {
+        pauseUIObjects.forEach(obj => obj.destroy && obj.destroy());
+        pauseUIObjects = [];
+
+        const bgInst = k.add([
+            k.sprite("bg_instrucoes"),
+            k.pos(k.width() / 2, k.height() / 2),
+            k.anchor("center"),
+            k.scale(k.width() / 3840, k.height() / 2160),
+            k.z(2100)
+        ]);
+
+        const btnVoltar = createStandardButton("Voltar", k.vec2(k.width() / 2, k.height() - 80), () => {
+            bgInst.destroy();
+            showMainMenu();
+        }, 2101);
+
+        pauseUIObjects.push(bgInst, btnVoltar);
+    };
 
     const togglePause = () => {
         if (!isPaused) {
             isPaused = true;
             isGamePaused = true;
-            // Overlay de fundo (tela de pause)
+            
             pauseOverlay = k.add([
                 k.sprite("bg_menu_pausa"),
                 k.pos(k.width() / 2, k.height() / 2),
                 k.anchor("center"),
                 k.scale(k.width() / 3840, k.height() / 2160),
-                k.z(900),
+                k.z(2000),
                 "pause_overlay"
             ]);
 
-            // Botão Continuar
-            pauseContinueBtn = createStandardButton("Continuar", k.vec2(k.width() / 2, k.height() / 2 + 120), () => {
+            pauseCloseBtn = k.add([
+                k.pos(960, 110),
+                k.anchor("center"),
+                k.z(2050),
+                k.area({ shape: new k.Rect(k.vec2(0, 0), 48, 48) }),
+                "pause_close_btn"
+            ]);
+
+            const circle = pauseCloseBtn.add([
+                k.circle(24),
+                k.anchor("center"),
+                k.color(DESIGN.colors.critical),
+                k.outline(4, DESIGN.colors.menuPlateOutline),
+            ]);
+
+            pauseCloseBtn.add([
+                k.text("X", { size: 24, font: "Fredoka" }),
+                k.anchor("center"),
+                k.color(DESIGN.colors.white),
+                k.pos(0, 0)
+            ]);
+
+            pauseCloseBtn.onHover(() => {
+                if (circle.color.r !== 255 || circle.color.g !== 100) {
+                    k.play("sfx_hover", { volume: 0.5 });
+                }
+                circle.color = k.rgb(255, 100, 100);
+                k.setCursor("pointer");
+            });
+
+            pauseCloseBtn.onHoverEnd(() => {
+                circle.color = DESIGN.colors.critical;
+                k.setCursor("default");
+            });
+
+            pauseCloseBtn.onClick(() => {
+                k.play("sfx_click", { volume: 0.6 });
                 togglePause();
             });
 
-            // Botão Voltar ao Menu
-            pauseMenuBtn = createStandardButton("Menu", k.vec2(k.width() / 2, k.height() / 2 + 200), () => {
-                // Fecha pause e vai para menu
-                if (isPaused) togglePause();
-                k.go("menu");
-            });
+            showMainMenu();
 
-            // Tenta pausar o engine, se suportado
+            muffleBGM(true);
             try { (k as any).pause && (k as any).pause(); } catch (e) { }
         } else {
             isPaused = false;
             isGamePaused = false;
+            muffleBGM(false);
+            
             if (pauseOverlay && pauseOverlay.destroy) pauseOverlay.destroy();
-            if (pauseContinueBtn && pauseContinueBtn.destroy) pauseContinueBtn.destroy();
-            if (pauseMenuBtn && pauseMenuBtn.destroy) pauseMenuBtn.destroy();
-            pauseOverlay = pauseContinueBtn = pauseMenuBtn = null;
+            if (pauseCloseBtn && pauseCloseBtn.destroy) pauseCloseBtn.destroy();
+            pauseUIObjects.forEach(obj => obj.destroy && obj.destroy());
+            
+            pauseOverlay = pauseCloseBtn = null;
+            pauseUIObjects = [];
+
             try { (k as any).resume && (k as any).resume(); } catch (e) { }
         }
     };
 
-    k.onKeyPress("escape", () => togglePause());
+    k.onKeyPress(["escape", "p"], () => togglePause());
+
+    // Auto-pause on exiting fullscreen while in the game scene
+    const onFullScreenChangeGame = () => {
+        const full = isFullscreenActive();
+        if (!full && !isPaused && !isGameOver) {
+            togglePause();
+        }
+    };
+    document.addEventListener("fullscreenchange", onFullScreenChangeGame);
+    document.addEventListener("webkitfullscreenchange", onFullScreenChangeGame);
+
+    player.onDestroy(() => {
+        document.removeEventListener("fullscreenchange", onFullScreenChangeGame);
+        document.removeEventListener("webkitfullscreenchange", onFullScreenChangeGame);
+    });
 
     // 6. Sistema de Motor (Acelerar/Freio) e velocidade implacável global
     k.onUpdate(() => {
@@ -843,6 +1267,9 @@ k.scene("game", () => {
 
 // ---- CENA DE CUTSCENE (Narrativa) ----
 k.scene("cutscene", () => {
+    // ---- BGM DA CUTSCENE ----
+    playBGM("bgm_cutscene");
+
     let currentSlide = 1;
 
     // Fundo da Cutscene
@@ -883,6 +1310,7 @@ k.scene("cutscene", () => {
     };
 
     k.onClick("btn_right", () => {
+        k.play("sfx_click", { volume: 0.6 });
         if (currentSlide < 4) {
             currentSlide++;
             updateSlide();
@@ -893,6 +1321,7 @@ k.scene("cutscene", () => {
     });
 
     k.onClick("btn_left", () => {
+        k.play("sfx_click", { volume: 0.6 });
         if (currentSlide > 1) {
             currentSlide--;
             updateSlide();
@@ -901,10 +1330,28 @@ k.scene("cutscene", () => {
             k.go("menu");
         }
     });
+
+    k.onHover("btn_right", () => {
+        k.setCursor("pointer");
+        k.play("sfx_hover", { volume: 0.5 });
+    });
+    k.onHoverEnd("btn_right", () => {
+        k.setCursor("default");
+    });
+    k.onHover("btn_left", () => {
+        k.setCursor("pointer");
+        k.play("sfx_hover", { volume: 0.5 });
+    });
+    k.onHoverEnd("btn_left", () => {
+        k.setCursor("default");
+    });
 });
 
 // ---- CENA DE MENU INICIAL ----
 k.scene("menu", () => {
+    // ---- BGM DO MENU ----
+    playBGM("bgm_menu");
+
     k.add([
         k.sprite("tela_inicial"),
         k.pos(0, 0),
@@ -945,6 +1392,9 @@ k.scene("menu", () => {
         ]);
 
         plate.onHover(() => {
+            if (plate.color.r !== DESIGN.colors.menuPlateHover.r) {
+                k.play("sfx_hover", { volume: 0.5 });
+            }
             plate.color = DESIGN.colors.menuPlateHover;
             btn.color = DESIGN.colors.menuTextHover;
         });
@@ -954,7 +1404,10 @@ k.scene("menu", () => {
             btn.color = DESIGN.colors.menuText;
         });
 
-        plate.onClick(opt.action);
+        plate.onClick(() => {
+            k.play("sfx_click", { volume: 0.6 });
+            opt.action();
+        });
     });
 });
 
@@ -1047,6 +1500,7 @@ k.scene("configuracoes", () => {
     });
 
     handle.onHover(() => {
+        k.play("sfx_hover", { volume: 0.5 });
         k.setCursor("pointer");
     });
     handle.onHoverEnd(() => {
@@ -1070,30 +1524,6 @@ k.scene("configuracoes", () => {
     });
 
     // ---- FULLSCREEN BUTTONS (SIM / NÃO) ----
-    const isFullscreenActive = () => {
-        return !!(document.fullscreenElement || (document as any).webkitFullscreenElement);
-    };
-
-    const toggleFullscreen = (enable: boolean) => {
-        if (enable) {
-            const docEl = document.documentElement;
-            if (docEl.requestFullscreen) {
-                docEl.requestFullscreen();
-            } else if ((docEl as any).webkitRequestFullscreen) {
-                (docEl as any).webkitRequestFullscreen();
-            }
-        } else {
-            if (document.exitFullscreen) {
-                document.exitFullscreen();
-            } else if ((document as any).webkitExitFullscreen) {
-                (document as any).webkitExitFullscreen();
-            }
-        }
-        // Force resize recalculation in browser
-        setTimeout(() => {
-            window.dispatchEvent(new Event('resize'));
-        }, 100);
-    };
 
     let isFull = isFullscreenActive();
     const btnWidth = 110;
@@ -1187,6 +1617,7 @@ k.scene("configuracoes", () => {
     refreshButtons();
 
     btnSim.onClick(() => {
+        k.play("sfx_click", { volume: 0.6 });
         plateSim.pos.y = 3;
         labelSim.pos.y = 3;
         k.wait(0.1, () => {
@@ -1200,6 +1631,7 @@ k.scene("configuracoes", () => {
     });
 
     btnNao.onClick(() => {
+        k.play("sfx_click", { volume: 0.6 });
         plateNao.pos.y = 3;
         labelNao.pos.y = 3;
         k.wait(0.1, () => {
@@ -1213,6 +1645,9 @@ k.scene("configuracoes", () => {
     });
 
     btnSim.onHover(() => {
+        if (!isFullscreenActive()) {
+            k.play("sfx_hover", { volume: 0.5 });
+        }
         k.setCursor("pointer");
         if (!isFullscreenActive()) {
             plateSim.color = k.rgb(214, 200, 189);
@@ -1226,6 +1661,9 @@ k.scene("configuracoes", () => {
     });
 
     btnNao.onHover(() => {
+        if (isFullscreenActive()) {
+            k.play("sfx_hover", { volume: 0.5 });
+        }
         k.setCursor("pointer");
         if (isFullscreenActive()) {
             plateNao.color = k.rgb(214, 200, 189);
@@ -1265,11 +1703,36 @@ k.scene("configuracoes", () => {
     createStandardButton("Voltar", k.vec2(k.width() / 2, k.height() - 80), () => k.go("menu"));
 });
 
-k.go("menu");
+// ---- CENA DE START PARA PERMITIR ÁUDIO ----
+k.scene("start", () => {
+    // Fundo escuro simples
+    k.add([
+        k.rect(k.width(), k.height()),
+        k.pos(0, 0),
+        k.color(DESIGN.colors.black)
+    ]);
+
+    k.add([
+        k.text("Clique na tela para iniciar", { size: DESIGN.font.title, font: "Fredoka", align: "center" }),
+        k.pos(k.width() / 2, k.height() / 2),
+        k.anchor("center"),
+        k.color(DESIGN.colors.white),
+    ]);
+
+    k.onClick(() => {
+        k.play("sfx_click", { volume: 0.6 });
+        k.go("menu");
+    });
+});
+
+k.go("start");
 
 // ---- CENA DE GAME OVER / VITORIA ----
 k.scene("gameover", ({ win, reason }: { win: boolean, reason: string }) => {
-    
+    // ---- JINGLE DE VITÓRIA OU DERROTA ----
+    stopBGM();
+    k.play(win ? "jingle_vitoria" : "jingle_derrota", { loop: false, volume: 0.8 });
+
     k.add([
         k.sprite(win ? "bg_vitoria" : "bg_derrota"),
         k.pos(0,0),
