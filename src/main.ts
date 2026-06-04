@@ -280,10 +280,18 @@ k.scene("game", () => {
     // 4. Estado do Jogo (Condições de Vitória/Derrota)
     let isGameOver = false;
     let distanceTraveled = 0; // Metros
-    let timeRemaining = 60;   // Segundos (Ex: 1 minuto para entregar)
+    let timeRemaining = 40;   // Segundos (Arcade Express)
     const TARGET_DISTANCE = 3000; // Distância total para vencer
     let paciencia = 100;
     let babyCrySound: any = null; // Guarda a referência do som de choro
+
+    // Arcade Express - Mecânica de Entregas
+    let entregasFeitas = 0;
+    let entregasPerdidas = 0;
+    const TOTAL_ENTREGAS = 7;
+    let targetsSpawned = 0;
+    let lastTargetSpawnDistance = 0;
+    const TARGET_SPAWN_INTERVAL = TARGET_DISTANCE / TOTAL_ENTREGAS; // ~428m
 
     // 5. Configuração do Mundo Físico
     let damageTimer = 0; // Controle de feedback visual de dano por tempo
@@ -372,12 +380,20 @@ k.scene("game", () => {
     ]);
     
     // Caderno (Topo Direito)
-    k.add([
+    const cadernoHUD = k.add([
         k.sprite("ui_caderno"),
         k.pos(k.width() - 20, 20),
         k.anchor("topright"),
+        k.scale(1.5), // Aumentando o tamanho visual do asset
         k.fixed(),
         k.z(1000)
+    ]);
+
+    const entregasTextoHUD = cadernoHUD.add([
+        k.text(`${entregasFeitas}/7`, { size: 24, font: "Fredoka" }),
+        k.pos(-34, 32), // Ajuste fino para esquerda e com fonte menor
+        k.anchor("center"),
+        k.color(50, 50, 50)
     ]);
 
     // ---- SPAWNER DE CAIXAS DE CORREIO (Sincronizado com o Loop do Cenário) ----
@@ -393,64 +409,102 @@ k.scene("game", () => {
         // Se x não for passado, calcula a posição exata baseada na borda direita menos o excesso de percurso
         const xPos = startX !== undefined ? startX : k.width() + 96 - distAccumCorreio;
         
+        // LÓGICA ARCADE EXPRESS: Checar se spawnamos um alvo
+        let isTargetSup = false;
+        let isTargetInf = false;
+        
+        if (targetsSpawned < TOTAL_ENTREGAS && distanceTraveled >= lastTargetSpawnDistance + TARGET_SPAWN_INTERVAL) {
+            lastTargetSpawnDistance += TARGET_SPAWN_INTERVAL;
+            targetsSpawned++;
+            if (k.chance(0.5)) isTargetSup = true;
+            else isTargetInf = true;
+        }
+
         // CORREIO SUPERIOR (Topo da Calçada)
         const spriteSup = toggleSpriteCorreio ? "correio_1" : "correio_2";
-        const yPosSup = 236; // 300 - 64 (Topo da calçada corrigido)
+        const yPosSup = 236; // Topo da calçada corrigido
         
         const correioSup = k.add([
             k.sprite(spriteSup),
             k.pos(xPos, yPosSup),
             k.anchor("center"),
-            k.z(-10), // Atrás dos pedestres e carros
-            "correio"
+            k.z(-10),
+            "correio",
+            { isTarget: isTargetSup, delivered: false, missed: false }
         ]);
+        
+        if (isTargetSup) {
+            correioSup.add([
+                k.sprite("seta_correio"),
+                k.pos(0, -60), // Relativo ao centro da caixa
+                k.anchor("center"),
+                "seta"
+            ]);
+        }
         
         correioSup.onUpdate(() => {
             if (isGamePaused) return;
             correioSup.move(-currentScrollSpeed, 0);
-            if (correioSup.pos.x < -100) correioSup.destroy();
+            
+            const seta = correioSup.get("seta")[0];
+            if (seta) {
+                seta.pos.y = -60 + Math.sin(k.time() * 5) * 10;
+            }
+
+            if (correioSup.pos.x < -100) {
+                if (correioSup.isTarget && !correioSup.delivered && !correioSup.missed) {
+                    correioSup.missed = true;
+                    entregasPerdidas++;
+                    paciencia -= 20; // Penalidade Grave
+                    // k.play("sfx_bebe_raiva", { volume: 0.3 }); // Som de erro
+                }
+                correioSup.destroy();
+            }
         });
         
         // CORREIO INFERIOR (Base da Calçada)
-        const spriteInf = toggleSpriteCorreio ? "correio_2" : "correio_1"; // Sprite alternado
-        const yPosInf = 680; // Base da calçada
+        const spriteInf = toggleSpriteCorreio ? "correio_2" : "correio_1";
+        const yPosInf = 680;
         
         const correioInf = k.add([
             k.sprite(spriteInf),
             k.pos(xPos, yPosInf),
             k.anchor("center"),
-            k.z(100), // À frente de tudo na pista
-            "correio"
+            k.z(100),
+            "correio",
+            { isTarget: isTargetInf, delivered: false, missed: false }
         ]);
+        
+        if (isTargetInf) {
+            correioInf.add([
+                k.sprite("seta_correio"),
+                k.pos(0, -60),
+                k.anchor("center"),
+                "seta"
+            ]);
+        }
         
         correioInf.onUpdate(() => {
             if (isGamePaused) return;
             correioInf.move(-currentScrollSpeed, 0);
-            if (correioInf.pos.x < -100) correioInf.destroy();
+
+            const seta = correioInf.get("seta")[0];
+            if (seta) {
+                seta.pos.y = -60 + Math.sin(k.time() * 5) * 10;
+            }
+
+            if (correioInf.pos.x < -100) {
+                if (correioInf.isTarget && !correioInf.delivered && !correioInf.missed) {
+                    correioInf.missed = true;
+                    entregasPerdidas++;
+                    paciencia -= 20; // Penalidade Grave
+                    // k.play("sfx_bebe_raiva", { volume: 0.3 }); // Som de erro
+                }
+                correioInf.destroy();
+            }
         });
 
         toggleSpriteCorreio = !toggleSpriteCorreio;
-        
-        // Gerar seta com 30% chance
-        if (k.chance(0.3)) {
-            const isSetaSup = k.chance(0.5);
-            const ySeta = isSetaSup ? yPosSup - 55 : yPosInf - 55;
-            const zSeta = isSetaSup ? -9 : 101;
-
-            const seta = k.add([
-                k.sprite("seta_correio"),
-                k.pos(xPos, ySeta), 
-                k.anchor("center"),
-                k.z(zSeta),
-                "seta"
-            ]);
-            
-            seta.onUpdate(() => {
-                if (isGamePaused) return;
-                seta.move(-currentScrollSpeed, Math.sin(k.time() * 5) * 10);
-                if (seta.pos.x < -100) seta.destroy();
-            });
-        }
     };
 
     // Preenchendo a tela no primeiro frame (Sincronizado perfeitamente! O centro do bloco escuro começa em 96px e a tela tem 1280px)
@@ -1194,6 +1248,71 @@ k.scene("game", () => {
 
     k.onKeyPress(["escape", "p"], () => togglePause());
 
+    // Lógica de Entrega (Arcade Express)
+    k.onKeyPress(["space", "e"], () => {
+        if (isGamePaused || isGameOver) return;
+        
+        // Apenas as faixas 0 (Cima) e 4 (Baixo) permitem entregas
+        if (currentLane !== 0 && currentLane !== 4) return;
+        
+        const correios = k.get("correio");
+        let entregou = false;
+
+        for (const c of correios) {
+            if (c.isTarget && !c.delivered && !c.missed) {
+                // Checar se o player está próximo o suficiente no Eixo X (Margem de erro de 150px)
+                const distX = Math.abs(c.pos.x - player.pos.x);
+                if (distX < 150) {
+                    // Checar se o player está na calçada correta
+                    // Correio superior tem y = 236. Inferior = 680
+                    const isTopMailbox = c.pos.y < 400;
+                    
+                    if ((isTopMailbox && currentLane === 0) || (!isTopMailbox && currentLane === 4)) {
+                        c.delivered = true;
+                        entregasFeitas++;
+                        entregasTextoHUD.text = `${entregasFeitas}/7`;
+                        
+                        timeRemaining += 10;
+                        paciencia = Math.min(100, paciencia + 10);
+                        
+                        // k.play("sfx_click", { volume: 0.8 }); // Som de sucesso provisório
+                        
+                        // Remover a seta visualmente
+                        const seta = c.get("seta")[0];
+                        if (seta) seta.destroy();
+
+                        // Feedback visual flutuante (feito manualmente para evitar crash de engine)
+                        const feedbackTempo = k.add([
+                            k.text("+10s!", { size: 36, font: "Fredoka" }),
+                            k.pos(c.pos.x, c.pos.y - 100),
+                            k.color(DESIGN.colors.primary),
+                            k.anchor("center"),
+                            k.opacity(1) // Obrigatório para a opacidade funcionar no onUpdate
+                        ]);
+                        
+                        feedbackTempo.onUpdate(() => {
+                            feedbackTempo.pos.y -= 150 * k.dt();
+                            feedbackTempo.opacity = Math.max(0, feedbackTempo.opacity - k.dt());
+                        });
+                        
+                        k.wait(1, () => {
+                            feedbackTempo.destroy();
+                        });
+
+                        entregou = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Se apertou no vazio ou na faixa errada
+        if (!entregou) {
+            paciencia -= 5;
+            // k.play("sfx_click", { volume: 0.3, detune: -500 });
+        }
+    });
+
     // Auto-pause on exiting fullscreen while in the game scene
     const onFullScreenChangeGame = () => {
         const full = isFullscreenActive();
@@ -1296,12 +1415,12 @@ k.scene("game", () => {
                 isGameOver = true;
                 if (babyCrySound) babyCrySound.stop();
                 if (engineSound) engineSound.stop();
-                k.go("gameover", { win: true, reason: "Entrega concluída! O bebê sobreviveu em paz." });
+                k.go("gameover", { win: true, reason: `Chegou na mãe da criança!\nVocê fez ${entregasFeitas}/7 entregas extra.` });
             } else if (timeRemaining <= 0) {
                 isGameOver = true;
                 if (babyCrySound) babyCrySound.stop();
                 if (engineSound) engineSound.stop();
-                k.go("gameover", { win: false, reason: "O tempo acabou! Entrega falhou (Geladeira)." });
+                k.go("gameover", { win: false, reason: "O tempo acabou! Você demorou demais." });
             }
         }
 
