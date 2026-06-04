@@ -89,8 +89,11 @@ k.loadSound("bgm_gameplay",  "./assets/gameplay.mp3");
 k.loadSound("bgm_cutscene",  "./assets/cutscene.ogg");
 k.loadSound("jingle_vitoria","./assets/vitoria.mp3");
 k.loadSound("jingle_derrota","./assets/derrota.wav");
+
+// ---- ÁUDIO: Carregamento de SFX ----
 k.loadSound("sfx_hover", "./assets/rollover-menu.wav");
 k.loadSound("sfx_click", "./assets/click-botao.wav");
+k.loadSound("sfx_bebe_raiva", "./assets/sfx_bebe_raiva.mp3");
 
 // Usando no Kaplay a fonte importada no index.html
 
@@ -247,18 +250,21 @@ k.scene("game", () => {
     // 3. Sistema de Grid (5 Faixas)
     // 0: Pista Cima | 1: Corredor Cima | 2: Pista Meio | 3: Corredor Baixo | 4: Pista Baixo
     const LANES = [360, 420, 480, 540, 600];
-    let currentLane = 2; // Come�a no meio
+    let currentLane = 2; // Começa no meio
     let isChangingLane = false;
     let corridorTimer = 0;
     const CORRIDOR_GRACE = 0.9; // seconds
 
-    // Estado do Jogo (MVP)
+    // 4. Estado do Jogo (Condições de Vitória/Derrota)
+    let isGameOver = false;
+    let distanceTraveled = 0; // Metros
+    let timeRemaining = 60;   // Segundos (Ex: 1 minuto para entregar)
+    const TARGET_DISTANCE = 3000; // Distância total para vencer
     let paciencia = 100;
-    let timeRemaining = 120;
-    let distanceTraveled = 0;
-    const TARGET_DISTANCE = 5000;
+    let babyCrySound: any = null; // Guarda a referência do som de choro
+
+    // 5. Configuração do Mundo Físico
     let damageTimer = 0; // Controle de feedback visual de dano por tempo
-    let isGameOver = false; // Prevê chamadas múltiplas de fim de jogo
 
     // Mapa de carros ativos por faixa (optimização O(n) por faixa)
     const activeCarsByLane: Record<number, any[]> = {
@@ -321,6 +327,7 @@ k.scene("game", () => {
     const rostoBebeUI = k.add([
         k.sprite("ui_feliz"),
         k.pos(20, 20),
+        k.color(255, 255, 255),
         k.fixed(),
         k.z(1000)
     ]);
@@ -1224,12 +1231,19 @@ k.scene("game", () => {
         if (paciencia > 60) {
             barraPacienciaUI.color = DESIGN.colors.primary; // Verde (Saudável)
             rostoBebeUI.use(k.sprite("ui_feliz"));
+            rostoBebeUI.pos = k.vec2(20, 20);
+            rostoBebeUI.color = k.rgb(255, 255, 255);
         } else if (paciencia > 30) {
             barraPacienciaUI.color = DESIGN.colors.alert; // Laranja (Atenção)
             rostoBebeUI.use(k.sprite("ui_ok"));
+            rostoBebeUI.pos = k.vec2(20, 20);
+            rostoBebeUI.color = k.rgb(255, 255, 255);
         } else {
             barraPacienciaUI.color = DESIGN.colors.critical; // Vermelho (Perigo)
             rostoBebeUI.use(k.sprite("ui_surto"));
+            // Efeito de raiva: Tremendo e piscando
+            rostoBebeUI.pos = k.vec2(20 + k.rand(-3, 3), 20 + k.rand(-3, 3));
+            rostoBebeUI.color = Math.floor(k.time() * 10) % 2 === 0 ? k.rgb(255, 100, 100) : k.rgb(255, 255, 255);
         }
 
         // Tempo e Distância
@@ -1240,12 +1254,15 @@ k.scene("game", () => {
         if (!isGameOver) {
             if (paciencia <= 0) {
                 isGameOver = true;
+                if (babyCrySound) babyCrySound.stop();
                 k.go("gameover", { win: false, reason: "A paciência esgotou! O bebê chorou muito e você perdeu." });
             } else if (distanceTraveled >= TARGET_DISTANCE) {
                 isGameOver = true;
+                if (babyCrySound) babyCrySound.stop();
                 k.go("gameover", { win: true, reason: "Entrega concluída! O bebê sobreviveu em paz." });
             } else if (timeRemaining <= 0) {
                 isGameOver = true;
+                if (babyCrySound) babyCrySound.stop();
                 k.go("gameover", { win: false, reason: "O tempo acabou! Entrega falhou (Geladeira)." });
             }
         }
@@ -1256,9 +1273,17 @@ k.scene("game", () => {
             player.hidden = Math.floor(k.time() * 20) % 2 === 0; // Blink of invulnerability/damage
         } else {
             player.hidden = false;
-            // Efeito de treme da tela se a paciência estiver muito baixa (Perigo)
-            if (paciencia < 30 && Math.random() < 0.1) {
-                k.shake(1);
+            // Estado Crítico (Barra Vermelha)
+            if (paciencia < 30) {
+                if (!babyCrySound) {
+                    babyCrySound = k.play("sfx_bebe_raiva", { loop: true, volume: 0.8 });
+                }
+                if (Math.random() < 0.1) k.shake(1);
+            } else {
+                if (babyCrySound) {
+                    babyCrySound.stop();
+                    babyCrySound = null;
+                }
             }
         }
     });
