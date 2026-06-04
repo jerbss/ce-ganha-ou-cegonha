@@ -169,11 +169,10 @@ export function createStandardButton(text: string, pos: any, action: () => void,
     const btnHeight = 60;
     const btnRadius = 30;
 
-    // Container principal do botão que trata o clique
+    // Container principal do botão (sem anchor para evitar bugs de herança em sub-objetos)
     const btn = k.add([
         k.pos(pos),
-        k.area({ shape: new k.Rect(k.vec2(0, 0), btnWidth, btnHeight) }),
-        k.anchor("center"),
+        k.area({ shape: new k.Rect(k.vec2(-btnWidth / 2, -btnHeight / 2), btnWidth, btnHeight) }),
         k.z(zIndex),
         "standard_btn"
     ]);
@@ -191,7 +190,7 @@ export function createStandardButton(text: string, pos: any, action: () => void,
         k.rect(btnWidth, btnHeight, { radius: btnRadius }),
         k.pos(0, 0),
         k.anchor("center"),
-        k.color(74, 229, 226), // Ciano (Tonalidade vibrante do gradiente)
+        k.color(74, 229, 226), // Ciano
     ]);
 
     // 3. Texto com Outline
@@ -1439,17 +1438,17 @@ k.scene("game", () => {
                 isGameOver = true;
                 if (babyCrySound) babyCrySound.stop();
                 if (engineSound) engineSound.stop();
-                k.go("gameover", { win: false, reason: "A paciência esgotou! O bebê chorou muito e você perdeu." });
+                k.go("gameover", { win: false, reason: "A paciência esgotou! O bebê chorou muito e você perdeu.", entregasFeitas, entregasPerdidas });
             } else if (distanceTraveled >= TARGET_DISTANCE) {
                 isGameOver = true;
                 if (babyCrySound) babyCrySound.stop();
                 if (engineSound) engineSound.stop();
-                k.go("gameover", { win: true, reason: `Chegou na mãe da criança!\nVocê fez ${entregasFeitas}/7 entregas extra.` });
+                k.go("gameover", { win: true, reason: `Chegou na mãe da criança!\nVocê fez ${entregasFeitas}/7 entregas extra.`, entregasFeitas, entregasPerdidas });
             } else if (timeRemaining <= 0) {
                 isGameOver = true;
                 if (babyCrySound) babyCrySound.stop();
                 if (engineSound) engineSound.stop();
-                k.go("gameover", { win: false, reason: "O tempo acabou! Você demorou demais." });
+                k.go("gameover", { win: false, reason: "O tempo acabou! Você demorou demais.", entregasFeitas, entregasPerdidas });
             }
         }
 
@@ -1939,7 +1938,7 @@ k.scene("start", () => {
 k.go("start");
 
 // ---- CENA DE GAME OVER / VITORIA ----
-k.scene("gameover", ({ win, reason }: { win: boolean, reason: string }) => {
+k.scene("gameover", ({ win, reason, entregasFeitas, entregasPerdidas }: { win: boolean, reason: string, entregasFeitas?: number, entregasPerdidas?: number }) => {
     // ---- JINGLE DE VITÓRIA OU DERROTA ----
     stopBGM();
     k.play(win ? "jingle_vitoria" : "jingle_derrota", { loop: false, volume: 0.8 });
@@ -1951,20 +1950,64 @@ k.scene("gameover", ({ win, reason }: { win: boolean, reason: string }) => {
         k.z(0)
     ]);
 
-    // Texto de Motivo + Reiniciar flutuando
-    const restartText = k.add([
-        k.text(reason + "\n\nPressione ESPAÇO ou R para focar e voltar ao menu", { size: DESIGN.font.hud, font: "Fredoka", align: "center" }),
-        k.pos(k.width() / 2, k.height() - 90),
-        k.anchor("center"),
-        k.color(DESIGN.colors.white),
-        k.opacity(1),
-        k.outline(5, DESIGN.colors.black),
-        k.z(2)
-    ]);
+    if (!win) {
+        // TÍTULO IMPACTANTE NO TOPO - Mais espaçamento do topo do navegador (Y=90)
+        k.add([
+            k.text("FIM DA LINHA!", { size: 64, font: "Fredoka" }),
+            k.pos(k.width() / 2, 90),
+            k.anchor("center"),
+            k.color(DESIGN.colors.critical),
+            k.outline(6, DESIGN.colors.white),
+            k.z(2)
+        ]);
 
-    restartText.onUpdate(() => {
-        restartText.opacity = Math.floor(k.time() * 3) % 2 === 0 ? 1 : 0.4;
-    });
+        // PAINEL DE ESTATÍSTICAS NA PARTE INFERIOR - Reduzido e abaixado para não cobrir a arte
+        const painelHUD = k.add([
+            k.rect(700, 190, { radius: DESIGN.radius.large }),
+            k.pos(k.width() / 2, k.height() - 110),
+            k.anchor("center"),
+            k.color(30, 20, 15), // Marrom bem escuro
+            k.z(1)
+        ]);
 
-    k.onKeyPress(["r", "space"], () => k.go("menu"));
+        // Título do boletim
+        painelHUD.add([
+            k.text(`Você concluiu ${entregasFeitas || 0} de 7 entregas.`, { size: 32, font: "Fredoka", align: "center" }),
+            k.pos(0, -55),
+            k.anchor("center"),
+            k.color(DESIGN.colors.white),
+        ]);
+
+        // Feedback extra
+        painelHUD.add([
+            k.text(`Pacotes perdidos no caminho: ${entregasPerdidas || 0}`, { size: 24, font: "Fredoka", align: "center" }),
+            k.pos(0, -15),
+            k.anchor("center"),
+            k.color(DESIGN.colors.alert),
+        ]);
+
+        // Botões (lado a lado) - Alinhados perfeitamente no novo painel com margem confortável
+        createStandardButton("Tentar Novamente", k.vec2(k.width() / 2 - 170, k.height() - 75), () => k.go("game"), 5);
+        createStandardButton("Pedir Demissão", k.vec2(k.width() / 2 + 170, k.height() - 75), () => k.go("menu"), 5);
+        
+        // Atalho rápido opcional pelo teclado
+        k.onKeyPress(["space", "r"], () => k.go("game"));
+    } else {
+        // Texto de Vitória Flutuante Padrão
+        const restartText = k.add([
+            k.text(reason + "\n\nPressione ESPAÇO ou R para voltar ao menu", { size: DESIGN.font.hud, font: "Fredoka", align: "center" }),
+            k.pos(k.width() / 2, k.height() - 90),
+            k.anchor("center"),
+            k.color(DESIGN.colors.white),
+            k.opacity(1),
+            k.outline(5, DESIGN.colors.black),
+            k.z(2)
+        ]);
+
+        restartText.onUpdate(() => {
+            restartText.opacity = Math.floor(k.time() * 3) % 2 === 0 ? 1 : 0.4;
+        });
+
+        k.onKeyPress(["r", "space"], () => k.go("menu"));
+    }
 });
