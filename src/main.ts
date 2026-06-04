@@ -94,6 +94,10 @@ k.loadSound("jingle_derrota","./assets/derrota.wav");
 k.loadSound("sfx_hover", "./assets/rollover-menu.wav");
 k.loadSound("sfx_click", "./assets/click-botao.wav");
 k.loadSound("sfx_bebe_raiva", "./assets/sfx_bebe_raiva.mp3");
+k.loadSound("sfx_aceleracao_moto", "./assets/sfx_aceleracao_moto.mp3");
+k.loadSound("colisao_carro", "./assets/colisao_carro.mp3");
+k.loadSound("sfx_cair_no_buraco", "./assets/sfx_cair_no_buraco.mp3");
+k.loadSound("sfx_buzina_carro", "./assets/sfx_buzina_carro.mp3");
 
 // Usando no Kaplay a fonte importada no index.html
 
@@ -235,6 +239,24 @@ export function createStandardButton(text: string, pos: any, action: () => void,
 k.scene("game", () => {
     // ---- BGM DA GAMEPLAY ----
     playBGM("bgm_gameplay");
+
+    let engineSound: any = null;
+    let targetEngineVol = 0.1;
+
+    const playEngineLoop = (seekTime: number) => {
+        try {
+            engineSound = k.play("sfx_aceleracao_moto", { loop: false, volume: targetEngineVol });
+            engineSound.seek(seekTime);
+            engineSound.onEnd(() => {
+                if (!isGameOver) {
+                    playEngineLoop(3.0);
+                }
+            });
+        } catch (e) {
+            console.warn("Could not play engine sound immediately due to autoplay policies.");
+        }
+    };
+    playEngineLoop(0);
 
     // 1. Constantes da Máquina de Scroll
     const BASE_SCROLL_SPEED = 400;
@@ -491,6 +513,7 @@ k.scene("game", () => {
             // APRESSADO: Surge de trÃ¡s rÃ¡pido. Carro Esportivo.
             const sp = todosOsCarros[Math.floor(k.rand(0, todosOsCarros.length))];
             archetype = { type: 'APRESSADO', realSpeed: 950, sprite: sp, startX: -200 };
+            k.play("sfx_buzina_carro", { volume: 0.3 });
         }
 
         // Evitar spawn sobreposto: verificar presença de carro perto da posição de spawn na mesma faixa
@@ -690,6 +713,7 @@ k.scene("game", () => {
     // ---- COLISÕES ----
     player.onCollide("pothole", () => {
         if (isGamePaused) return;
+        k.play("sfx_cair_no_buraco", { volume: 0.5 });
         k.shake(4);
         paciencia -= 15;
         damageTimer = 0.5; // Dano centralizado
@@ -713,6 +737,7 @@ k.scene("game", () => {
 
     player.onCollide("car", (car: any) => {
         if (isGamePaused) return;
+        k.play("colisao_carro", { volume: 0.5 });
         paciencia -= 20;
         damageTimer = 0.5; // Dano centralizado
         // Se o carro bateu NA TRASEIRA do player (veio de trás)
@@ -1146,11 +1171,15 @@ k.scene("game", () => {
             showMainMenu();
 
             muffleBGM(true);
+            if (engineSound) engineSound.paused = true;
+            if (babyCrySound) babyCrySound.paused = true;
             try { (k as any).pause && (k as any).pause(); } catch (e) { }
         } else {
             isPaused = false;
             isGamePaused = false;
             muffleBGM(false);
+            if (engineSound) engineSound.paused = false;
+            if (babyCrySound) babyCrySound.paused = false;
             
             if (pauseOverlay && pauseOverlay.destroy) pauseOverlay.destroy();
             if (pauseCloseBtn && pauseCloseBtn.destroy) pauseCloseBtn.destroy();
@@ -1215,6 +1244,12 @@ k.scene("game", () => {
         player.pos.x = k.lerp(player.pos.x, targetX, 1.8 * k.dt());
         currentScrollSpeed = k.lerp(currentScrollSpeed, targetSpeed, 2.0 * k.dt());
 
+        if (engineSound && !isGameOver && !isGamePaused) {
+            const vol = 0.1 + ((currentScrollSpeed - 400) / 800) * 0.3;
+            targetEngineVol = Math.max(0, Math.min(0.4, vol));
+            engineSound.volume = targetEngineVol;
+        }
+
         // ---- REGRAS DE GAME DESIGN (MVP) ----
         // Alta Velocidade esgota a paciência
         if (currentScrollSpeed > 800) {
@@ -1255,14 +1290,17 @@ k.scene("game", () => {
             if (paciencia <= 0) {
                 isGameOver = true;
                 if (babyCrySound) babyCrySound.stop();
+                if (engineSound) engineSound.stop();
                 k.go("gameover", { win: false, reason: "A paciência esgotou! O bebê chorou muito e você perdeu." });
             } else if (distanceTraveled >= TARGET_DISTANCE) {
                 isGameOver = true;
                 if (babyCrySound) babyCrySound.stop();
+                if (engineSound) engineSound.stop();
                 k.go("gameover", { win: true, reason: "Entrega concluída! O bebê sobreviveu em paz." });
             } else if (timeRemaining <= 0) {
                 isGameOver = true;
                 if (babyCrySound) babyCrySound.stop();
+                if (engineSound) engineSound.stop();
                 k.go("gameover", { win: false, reason: "O tempo acabou! Entrega falhou (Geladeira)." });
             }
         }
@@ -1276,7 +1314,7 @@ k.scene("game", () => {
             // Estado Crítico (Barra Vermelha)
             if (paciencia < 30) {
                 if (!babyCrySound) {
-                    babyCrySound = k.play("sfx_bebe_raiva", { loop: true, volume: 0.8 });
+                    babyCrySound = k.play("sfx_bebe_raiva", { loop: true, volume: 0.3 });
                 }
                 if (Math.random() < 0.1) k.shake(1);
             } else {
