@@ -98,6 +98,8 @@ k.loadSound("sfx_aceleracao_moto", "./assets/sfx_aceleracao_moto.mp3");
 k.loadSound("colisao_carro", "./assets/colisao_carro.mp3");
 k.loadSound("sfx_cair_no_buraco", "./assets/sfx_cair_no_buraco.mp3");
 k.loadSound("sfx_buzina_carro", "./assets/sfx_buzina_carro.mp3");
+k.loadSound("sfx_entrega_sucesso", "./assets/entrega-sucesso.mp3");
+k.loadSound("sfx_entrega_fracasso", "./assets/entrega-fracasso.mp3");
 
 // Usando no Kaplay a fonte importada no index.html
 
@@ -379,6 +381,23 @@ k.scene("game", () => {
         k.z(1001)
     ]);
     
+    // Relógio (Topo Centro)
+    const relogioContainer = k.add([
+        k.rect(140, 50, { radius: DESIGN.radius.large }),
+        k.pos(k.width() / 2, 60), // Y=60 alinha com o centro da barra de paciência (Y=44 + metade de 32)
+        k.anchor("center"),
+        k.color(DESIGN.colors.neutral),
+        k.fixed(),
+        k.z(1000)
+    ]);
+    
+    const relogioTextoHUD = relogioContainer.add([
+        k.text("40s", { size: 36, font: "Fredoka" }),
+        k.anchor("center"),
+        k.color(DESIGN.colors.white),
+        k.pos(0, 0)
+    ]);
+    
     // Caderno (Topo Direito)
     const cadernoHUD = k.add([
         k.sprite("ui_caderno"),
@@ -456,7 +475,7 @@ k.scene("game", () => {
                     correioSup.missed = true;
                     entregasPerdidas++;
                     paciencia -= 20; // Penalidade Grave
-                    // k.play("sfx_bebe_raiva", { volume: 0.3 }); // Som de erro
+                    k.play("sfx_entrega_fracasso", { volume: 0.5 });
                 }
                 correioSup.destroy();
             }
@@ -498,7 +517,7 @@ k.scene("game", () => {
                     correioInf.missed = true;
                     entregasPerdidas++;
                     paciencia -= 20; // Penalidade Grave
-                    // k.play("sfx_bebe_raiva", { volume: 0.3 }); // Som de erro
+                    k.play("sfx_entrega_fracasso", { volume: 0.5 });
                 }
                 correioInf.destroy();
             }
@@ -1275,7 +1294,7 @@ k.scene("game", () => {
                         timeRemaining += 10;
                         paciencia = Math.min(100, paciencia + 10);
                         
-                        // k.play("sfx_click", { volume: 0.8 }); // Som de sucesso provisório
+                        k.play("sfx_entrega_sucesso", { volume: 0.6 });
                         
                         // Remover a seta visualmente
                         const seta = c.get("seta")[0];
@@ -1309,7 +1328,7 @@ k.scene("game", () => {
         // Se apertou no vazio ou na faixa errada
         if (!entregou) {
             paciencia -= 5;
-            // k.play("sfx_click", { volume: 0.3, detune: -500 });
+            k.play("sfx_entrega_fracasso", { volume: 0.3, detune: -200 });
         }
     });
 
@@ -1403,6 +1422,16 @@ k.scene("game", () => {
         // Tempo e Distância
         timeRemaining -= k.dt();
         distanceTraveled += (currentScrollSpeed / 10) * k.dt(); // 10 px = 1 metro
+        
+        // Atualiza a UI do Relógio
+        relogioTextoHUD.text = `${Math.ceil(Math.max(0, timeRemaining))}s`;
+        if (timeRemaining <= 10) {
+            relogioTextoHUD.color = Math.floor(k.time() * 10) % 2 === 0 ? DESIGN.colors.critical : DESIGN.colors.white;
+            relogioContainer.color = DESIGN.colors.black; // Para dar mais contraste no vermelho
+        } else {
+            relogioTextoHUD.color = DESIGN.colors.white;
+            relogioContainer.color = DESIGN.colors.neutral;
+        }
 
         // Condições de Vitória e Derrota
         if (!isGameOver) {
