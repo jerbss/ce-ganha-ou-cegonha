@@ -164,10 +164,11 @@ export const toggleFullscreen = (enable: boolean) => {
 };
 
 // ---- COMPONENTES REUTILIZÁVEIS ----
-export function createStandardButton(text: string, pos: any, action: () => void, zIndex: number = 100) {
-    const btnWidth = 320;
-    const btnHeight = 60;
-    const btnRadius = 30;
+export function createStandardButton(text: string, pos: any, action: () => void, zIndex: number = 100, customWidth?: number, customHeight?: number, customFontSize?: number) {
+    const btnWidth = customWidth || 320;
+    const btnHeight = customHeight || 60;
+    const btnRadius = btnHeight / 2;
+    const shadowOffset = Math.round(btnHeight * 0.133); // 8px para botão de 60px, 6px para botão de 50px
 
     // Container principal do botão (sem anchor para evitar bugs de herança em sub-objetos)
     const btn = k.add([
@@ -180,7 +181,7 @@ export function createStandardButton(text: string, pos: any, action: () => void,
     // 1. Sombra / Placa de fundo escurecida (efeito 3D flat)
     btn.add([
         k.rect(btnWidth, btnHeight, { radius: btnRadius }),
-        k.pos(0, 8), // Deslocado 8px para baixo
+        k.pos(0, shadowOffset), // Deslocado proporcionalmente para baixo
         k.anchor("center"),
         k.color(30, 112, 128), // Azul Marinho / Teal escuro
     ]);
@@ -196,7 +197,7 @@ export function createStandardButton(text: string, pos: any, action: () => void,
     // 3. Texto com Outline
     const label = btn.add([
         k.text(text, {
-            size: DESIGN.font.button || 32,
+            size: customFontSize || DESIGN.font.button || 32,
             font: "Fredoka",
             align: "center",
         }),
@@ -224,8 +225,8 @@ export function createStandardButton(text: string, pos: any, action: () => void,
     btn.onClick(() => {
         k.play("sfx_click", { volume: 0.6 });
         // Efeito de "pressão"
-        plate.pos.y = 4;
-        label.pos.y = 4;
+        plate.pos.y = Math.round(btnHeight * 0.067); // 4px para botão de 60px, 3px para botão de 50px
+        label.pos.y = Math.round(btnHeight * 0.067);
         
         k.wait(0.1, () => {
             plate.pos.y = 0;
@@ -1951,44 +1952,38 @@ k.scene("gameover", ({ win, reason, entregasFeitas, entregasPerdidas }: { win: b
     ]);
 
     if (!win) {
-        // TÍTULO IMPACTANTE NO TOPO - Mais espaçamento do topo do navegador (Y=90)
+        // 1. TÍTULO "FIM DA LINHA!" NO TOPO
         k.add([
-            k.text("FIM DA LINHA!", { size: 64, font: "Fredoka" }),
-            k.pos(k.width() / 2, 90),
+            k.text("FIM DA LINHA!", { size: 38, font: "Fredoka" }),
+            k.pos(k.width() / 2, 45),
             k.anchor("center"),
-            k.color(DESIGN.colors.critical),
-            k.outline(6, DESIGN.colors.white),
+            k.color(255, 255, 255), // Branco
+            k.outline(5, k.rgb(0, 0, 0)), // Outline preto de 5px
             k.z(2)
         ]);
 
-        // PAINEL DE ESTATÍSTICAS NA PARTE INFERIOR - Reduzido e abaixado para não cobrir a arte
-        const painelHUD = k.add([
-            k.rect(700, 190, { radius: DESIGN.radius.large }),
-            k.pos(k.width() / 2, k.height() - 110),
+        // 2. ESTATÍSTICAS (Entregas e Pacotes) - Na faixa marrom inferior
+        k.add([
+            k.text(`Você concluiu ${entregasFeitas || 0} de 7 entregas.`, { size: 20, font: "Fredoka", align: "center" }),
+            k.pos(k.width() / 2, k.height() - 150),
             k.anchor("center"),
-            k.color(30, 20, 15), // Marrom bem escuro
-            k.z(1)
+            k.color(255, 255, 255),
+            k.outline(3, k.rgb(0, 0, 0)),
+            k.z(2)
         ]);
 
-        // Título do boletim
-        painelHUD.add([
-            k.text(`Você concluiu ${entregasFeitas || 0} de 7 entregas.`, { size: 32, font: "Fredoka", align: "center" }),
-            k.pos(0, -55),
+        k.add([
+            k.text(`Pacotes perdidos: ${entregasPerdidas || 0}`, { size: 20, font: "Fredoka", align: "center" }),
+            k.pos(k.width() / 2, k.height() - 120),
             k.anchor("center"),
-            k.color(DESIGN.colors.white),
+            k.color(255, 255, 255),
+            k.outline(3, k.rgb(0, 0, 0)),
+            k.z(2)
         ]);
 
-        // Feedback extra
-        painelHUD.add([
-            k.text(`Pacotes perdidos no caminho: ${entregasPerdidas || 0}`, { size: 24, font: "Fredoka", align: "center" }),
-            k.pos(0, -15),
-            k.anchor("center"),
-            k.color(DESIGN.colors.alert),
-        ]);
-
-        // Botões (lado a lado) - Alinhados perfeitamente no novo painel com margem confortável
-        createStandardButton("Tentar Novamente", k.vec2(k.width() / 2 - 170, k.height() - 75), () => k.go("game"), 5);
-        createStandardButton("Pedir Demissão", k.vec2(k.width() / 2 + 170, k.height() - 75), () => k.go("menu"), 5);
+        // 3. BOTÕES (lado a lado) - y: height - 60, largura 260px (mínimo 250px), altura 50px, fonte 28
+        createStandardButton("Tentar Novamente", k.vec2(k.width() / 2 - 140, k.height() - 60), () => k.go("game"), 5, 260, 50, 28);
+        createStandardButton("Pedir Demissão", k.vec2(k.width() / 2 + 140, k.height() - 60), () => k.go("menu"), 5, 260, 50, 28);
         
         // Atalho rápido opcional pelo teclado
         k.onKeyPress(["space", "r"], () => k.go("game"));
