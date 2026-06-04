@@ -7,6 +7,41 @@ const k = kaplay({
     background: [18, 18, 20], // #121214 - Asfalto noturno
 });
 
+// ---- DESIGN SYSTEM ----
+const DESIGN = {
+    // Paleta de Cores
+    colors: {
+        primary: k.rgb(46, 139, 87),      // Verde #2E8B57 - Saúde
+        alert: k.rgb(255, 140, 66),       // Laranja #FF8C42 - Atenção
+        critical: k.rgb(230, 57, 70),     // Vermelho #E63946 - Perigo
+        neutral: k.rgb(45, 62, 80),       // Cinza #2D3E50 - Backgrounds
+        white: k.rgb(255, 255, 255),      // Branco
+        black: k.rgb(26, 26, 26),         // Preto #1A1A1A
+        menuText: k.rgb(74, 43, 26),      // Menu text
+        menuTextHover: k.rgb(255, 243, 224), // Menu text hover
+        menuPlate: k.rgb(244, 195, 119),  // Menu plate
+        menuPlateHover: k.rgb(234, 146, 78), // Menu plate hover
+        menuPlateOutline: k.rgb(133, 71, 32), // Menu plate outline
+    },
+    // Tamanhos de Fonte (Fredoka)
+    font: {
+        title: 48,    // Títulos/Cenas
+        button: 40,   // Botões Menu
+        hud: 28,      // Labels HUD
+        small: 16,    // Debug/Pequeno
+    },
+    // Espaçamento
+    spacing: {
+        large: 16,    // Padding em containers
+        small: 8,     // Padding em items
+    },
+    // Raios de Borda
+    radius: {
+        large: 8,     // Elementos principais
+        small: 6,     // Elementos menores
+    },
+};
+
 // Carregamento de Assets
 k.loadSprite("cenario", "./assets/bg_cenario_loop.png");
 k.loadSprite("tela_inicial", "./assets/bg_menu_inicial.png");
@@ -43,8 +78,88 @@ k.loadSprite("ui_feliz", "./assets/ui_bebe_feliz.png");
 k.loadSprite("ui_ok", "./assets/ui_bebe_entediada.png");
 k.loadSprite("ui_surto", "./assets/ui_bebe_estressada.png");
 k.loadSprite("seta_correio", "./assets/spr_seta_correio.png");
+// Novos backgrounds de telas (padronizados)
+k.loadSprite("bg_menu_pausa", "./assets/bg_menu_pausa.png");
+k.loadSprite("bg_instrucoes", "./assets/bg_instrucoes.png");
+k.loadSprite("bg_configuracoes", "./assets/bg_configuracoes.png");
 
 // Usando no Kaplay a fonte importada no index.html
+
+// ---- ESTADO GLOBAL ----
+let isGamePaused = false;
+let globalVolume = 1.0;
+k.volume(globalVolume);
+
+// ---- COMPONENTES REUTILIZÁVEIS ----
+export function createStandardButton(text: string, pos: any, action: () => void) {
+    const btnWidth = 320;
+    const btnHeight = 60;
+    const btnRadius = 30;
+
+    // Container principal do botão que trata o clique
+    const btn = k.add([
+        k.pos(pos),
+        k.area({ shape: new k.Rect(k.vec2(0, 0), btnWidth, btnHeight) }),
+        k.anchor("center"),
+        k.z(100),
+        "standard_btn"
+    ]);
+
+    // 1. Sombra / Placa de fundo escurecida (efeito 3D flat)
+    btn.add([
+        k.rect(btnWidth, btnHeight, { radius: btnRadius }),
+        k.pos(0, 8), // Deslocado 8px para baixo
+        k.anchor("center"),
+        k.color(30, 112, 128), // Azul Marinho / Teal escuro
+    ]);
+
+    // 2. Botão Principal
+    const plate = btn.add([
+        k.rect(btnWidth, btnHeight, { radius: btnRadius }),
+        k.pos(0, 0),
+        k.anchor("center"),
+        k.color(74, 229, 226), // Ciano (Tonalidade vibrante do gradiente)
+    ]);
+
+    // 3. Texto com Outline
+    const label = btn.add([
+        k.text(text, {
+            size: DESIGN.font.button || 32,
+            font: "Fredoka",
+            align: "center",
+        }),
+        k.pos(0, 0),
+        k.anchor("center"),
+        k.color(0, 0, 0),
+        k.outline(4, k.rgb(255, 255, 255)), // Contorno branco espesso
+    ]);
+
+    // Efeitos de Hover
+    btn.onHover(() => {
+        plate.color = k.rgb(53, 181, 235); // Azul celeste ao passar o mouse
+        k.setCursor("pointer");
+    });
+
+    btn.onHoverEnd(() => {
+        plate.color = k.rgb(74, 229, 226); // Volta ao ciano
+        k.setCursor("default");
+    });
+
+    // Ação de Clique
+    btn.onClick(() => {
+        // Efeito de "pressão"
+        plate.pos.y = 4;
+        label.pos.y = 4;
+        
+        k.wait(0.1, () => {
+            plate.pos.y = 0;
+            label.pos.y = 0;
+            action();
+        });
+    });
+
+    return btn;
+}
 
 k.scene("game", () => {
     // 1. Constantes da M�quina de Scroll
@@ -114,6 +229,7 @@ k.scene("game", () => {
     ]);
 
     k.onUpdate(() => {
+        if (isGamePaused) return;
         // bg1.width pode estar indefinido logo no frame zero (se não usasse load antes).
         // 1280 é a largura de fallback
         const bgW = bg1.width || 1280;
@@ -139,18 +255,18 @@ k.scene("game", () => {
     ]);
     
     k.add([
-        k.rect(340, 32, { radius: 8 }),
+        k.rect(340, 32, { radius: DESIGN.radius.large }),
         k.pos(150, 44),
-        k.color(20, 20, 20),
+        k.color(DESIGN.colors.neutral),
         k.fixed(),
         k.z(1000)
     ]);
     
     // Preenchimento verde da barra
     const barraPacienciaUI = k.add([
-        k.rect(332, 24, { radius: 6 }),
+        k.rect(332, 24, { radius: DESIGN.radius.small }),
         k.pos(154, 48),
-        k.color(46, 139, 87), // Verde
+        k.color(DESIGN.colors.primary), // Verde
         k.fixed(),
         k.z(1001)
     ]);
@@ -240,6 +356,7 @@ k.scene("game", () => {
     }
 
     k.onUpdate(() => {
+        if (isGamePaused) return;
         distAccumCorreio += currentScrollSpeed * k.dt();
         while (distAccumCorreio >= DIST_ENTRE_CORREIOS) { 
             distAccumCorreio -= DIST_ENTRE_CORREIOS;
@@ -274,7 +391,7 @@ k.scene("game", () => {
         if (!rainActive) return;
 
         const drop = k.add([
-            k.rect(2, 14, { radius: 1 }),
+            k.rect(2, 14, { radius: DESIGN.radius.small }),
             k.pos(k.rand(0, k.width()), k.rand(-40, 0)),
             k.anchor("center"),
             k.color(90, 150, 255),
@@ -444,10 +561,10 @@ k.scene("game", () => {
             if (player.pos.x < 80) return;
 
             const indicator = k.add([
-                k.rect(16, 16, { radius: 3 }),
+                k.rect(16, 16, { radius: DESIGN.radius.small }),
                 k.pos(20, LANES[pickedLane]),
                 k.anchor("center"),
-                k.color(220, 40, 40),
+                k.color(DESIGN.colors.critical),
                 k.z(20),
                 "rear_alert"
             ]);
@@ -585,8 +702,56 @@ k.scene("game", () => {
     k.onKeyPress(["up", "w"], () => moveLane(-1));
     k.onKeyPress(["down", "s"], () => moveLane(1));
 
-    // 6. Sistema de Motor (Acelerar/Freio) e velocidade implac�vel global
+    // Pause / Overlay control (toggle com tecla ESC)
+    let isPaused = false;
+    let pauseOverlay: any = null;
+    let pauseContinueBtn: any = null;
+    let pauseMenuBtn: any = null;
+
+    const togglePause = () => {
+        if (!isPaused) {
+            isPaused = true;
+            isGamePaused = true;
+            // Overlay de fundo (tela de pause)
+            pauseOverlay = k.add([
+                k.sprite("bg_menu_pausa"),
+                k.pos(k.width() / 2, k.height() / 2),
+                k.anchor("center"),
+                k.scale(k.width() / 3840, k.height() / 2160),
+                k.z(900),
+                "pause_overlay"
+            ]);
+
+            // Botão Continuar
+            pauseContinueBtn = createStandardButton("Continuar", k.vec2(k.width() / 2, k.height() / 2 + 120), () => {
+                togglePause();
+            });
+
+            // Botão Voltar ao Menu
+            pauseMenuBtn = createStandardButton("Menu", k.vec2(k.width() / 2, k.height() / 2 + 200), () => {
+                // Fecha pause e vai para menu
+                if (isPaused) togglePause();
+                k.go("menu");
+            });
+
+            // Tenta pausar o engine, se suportado
+            try { (k as any).pause && (k as any).pause(); } catch (e) { }
+        } else {
+            isPaused = false;
+            isGamePaused = false;
+            if (pauseOverlay && pauseOverlay.destroy) pauseOverlay.destroy();
+            if (pauseContinueBtn && pauseContinueBtn.destroy) pauseContinueBtn.destroy();
+            if (pauseMenuBtn && pauseMenuBtn.destroy) pauseMenuBtn.destroy();
+            pauseOverlay = pauseContinueBtn = pauseMenuBtn = null;
+            try { (k as any).resume && (k as any).resume(); } catch (e) { }
+        }
+    };
+
+    k.onKeyPress("escape", () => togglePause());
+
+    // 6. Sistema de Motor (Acelerar/Freio) e velocidade implacável global
     k.onUpdate(() => {
+        if (isGamePaused) return;
         player.z = Math.floor(player.pos.y + MOTO_Y_OFFSET);
 
         let targetX = REST_X;
@@ -633,13 +798,13 @@ k.scene("game", () => {
         barraPacienciaUI.width = (paciencia / 100) * 332;
         
         if (paciencia > 60) {
-            barraPacienciaUI.color = k.rgb(46, 139, 87); // Verde (Saudável)
+            barraPacienciaUI.color = DESIGN.colors.primary; // Verde (Saudável)
             rostoBebeUI.use(k.sprite("ui_feliz"));
         } else if (paciencia > 30) {
-            barraPacienciaUI.color = k.rgb(218, 165, 32); // Amarelo/Laranja (Atenção)
+            barraPacienciaUI.color = DESIGN.colors.alert; // Laranja (Atenção)
             rostoBebeUI.use(k.sprite("ui_ok"));
         } else {
-            barraPacienciaUI.color = k.rgb(220, 20, 60); // Vermelho (Perigo)
+            barraPacienciaUI.color = DESIGN.colors.critical; // Vermelho (Perigo)
             rostoBebeUI.use(k.sprite("ui_surto"));
         }
 
@@ -684,6 +849,7 @@ k.scene("cutscene", () => {
     const bg = k.add([
         k.sprite("bg_cutscene_1"),
         k.pos(0, 0),
+        k.scale(k.width() / 1280, k.height() / 720),
         k.z(0)
     ]);
 
@@ -742,70 +908,361 @@ k.scene("menu", () => {
     k.add([
         k.sprite("tela_inicial"),
         k.pos(0, 0),
+        k.scale(k.width() / 1280, k.height() / 720),
     ]);
 
     // Ajuste fino do Y para encaixar verticalmente no centro de cada listra bege
     const options = [
         { text: "Novo Jogo", y: 390, action: () => k.go("cutscene") },
-        { text: "Configurações", y: 475, action: () => {} },
-        { text: "Instruções", y: 560, action: () => {} },
-        { text: "Sair", y: 645, action: () => {} }
+        { text: "Configurações", y: 475, action: () => k.go("configuracoes") },
+        { text: "Instruções", y: 560, action: () => k.go("instrucoes") }
     ];
 
-    options.forEach(opt => {
-        // 1. Sombra projetada (Drop Shadow) para dar profundidade estética
-        const shadow = k.add([
-            k.text(opt.text, { size: 42, font: "Fredoka" }),
-            k.pos(104, opt.y + 5),
+    const menuPlateX = 50;
+    const menuPlateHeight = 52;
+    const menuPlateWidth = 330;
+    const menuTextOffsetX = 24;
+
+    options.forEach((opt) => {
+        const plate = k.add([
+            k.rect(menuPlateWidth, menuPlateHeight, { radius: DESIGN.radius.large }),
+            k.pos(menuPlateX, opt.y),
             k.anchor("left"),
-            k.color(0, 0, 0),
-            k.opacity(0.4),
-            k.scale(1),
-            k.rotate(0),
-            k.z(1)
+            k.color(DESIGN.colors.menuPlate),
+            k.outline(4, DESIGN.colors.menuPlateOutline),
+            k.area(),
+            k.z(1),
+            "menu_plate"
         ]);
 
-        // 2. Texto Principal
         const btn = k.add([
-            k.text(opt.text, { size: 42, font: "Fredoka" }),
-            k.pos(100, opt.y), 
+            k.text(opt.text, { size: DESIGN.font.button, font: "Fredoka" }),
+            k.pos(menuPlateX + menuTextOffsetX, opt.y),
             k.anchor("left"),
-            k.color(255, 255, 255), // Texto branco para estourar no fundo
-            k.scale(1), 
-            k.rotate(0),
-            k.area(),
+            k.color(DESIGN.colors.menuText),
             k.z(2),
             "menu_btn"
         ]);
 
-        btn.onClick(opt.action);
-
-        // Feedback super suculento (Juicy/GameFeel)
-        btn.onHoverUpdate(() => {
-            btn.color = k.rgb(255, 220, 50); // Fica um amarelo vivo charmoso
-            k.setCursor("pointer");
-            
-            // Leve crescimento e "wobble" (balanço) cartunesco
-            btn.scale = k.vec2(1.08);
-            btn.angle = k.wave(-2, 2, k.time() * 5);
-            
-            // A sombra acompanha o balanço
-            shadow.scale = btn.scale;
-            shadow.angle = btn.angle;
+        plate.onHover(() => {
+            plate.color = DESIGN.colors.menuPlateHover;
+            btn.color = DESIGN.colors.menuTextHover;
         });
 
-        btn.onHoverEnd(() => {
-            btn.color = k.rgb(255, 255, 255); // Volta pro branco limpo
-            k.setCursor("default");
-            
-            // Reseta pro normal
-            btn.scale = k.vec2(1);
-            btn.angle = 0;
-            
-            shadow.scale = btn.scale;
-            shadow.angle = 0;
+        plate.onHoverEnd(() => {
+            plate.color = DESIGN.colors.menuPlate;
+            btn.color = DESIGN.colors.menuText;
+        });
+
+        plate.onClick(opt.action);
+    });
+});
+
+// ---- CENAS DE INSTRUÇÕES E CONFIGURAÇÕES ----
+k.scene("instrucoes", () => {
+    k.add([
+        k.sprite("bg_instrucoes"),
+        k.pos(0, 0),
+        k.scale(k.width() / 3840, k.height() / 2160),
+        k.z(0)
+    ]);
+
+    // Botão Voltar
+    createStandardButton("Voltar", k.vec2(k.width() / 2, k.height() - 80), () => k.go("menu"));
+});
+
+k.scene("configuracoes", () => {
+    k.add([
+        k.sprite("bg_configuracoes"),
+        k.pos(0, 0),
+        k.scale(k.width() / 3840, k.height() / 2160),
+        k.z(0)
+    ]);
+
+    // ---- VOLUME SLIDER ----
+    const sliderLeft = 570;
+    const sliderWidth = 300;
+    const sliderY = 285;
+
+    // Track background
+    const track = k.add([
+        k.rect(sliderWidth, 16, { radius: 8 }),
+        k.pos(sliderLeft, sliderY),
+        k.color(DESIGN.colors.menuPlateOutline),
+        k.outline(3, DESIGN.colors.menuPlateOutline),
+        k.area(),
+        k.anchor("left"),
+        k.z(1)
+    ]);
+
+    // Track fill
+    const fill = k.add([
+        k.rect(sliderWidth * globalVolume, 16, { radius: 8 }),
+        k.pos(sliderLeft, sliderY),
+        k.color(DESIGN.colors.primary),
+        k.anchor("left"),
+        k.z(2)
+    ]);
+
+    // Handle
+    const handle = k.add([
+        k.circle(14),
+        k.pos(sliderLeft + sliderWidth * globalVolume, sliderY),
+        k.color(DESIGN.colors.menuPlate),
+        k.outline(3, DESIGN.colors.menuPlateOutline),
+        k.area(),
+        k.anchor("center"),
+        k.z(3)
+    ]);
+
+    // Text representation of volume
+    const volumeLabel = k.add([
+        k.text(Math.round(globalVolume * 100) + "%", {
+            size: 24,
+            font: "Fredoka",
+        }),
+        k.pos(sliderLeft + sliderWidth + 20, sliderY),
+        k.anchor("left"),
+        k.color(DESIGN.colors.menuText),
+        k.z(2)
+    ]);
+
+    let isDraggingVolume = false;
+
+    const updateVolumeFromMouse = () => {
+        const mouseX = k.mousePos().x;
+        let pct = (mouseX - sliderLeft) / sliderWidth;
+        pct = Math.max(0, Math.min(1, pct));
+        globalVolume = pct;
+        k.volume(globalVolume);
+        
+        // Update visuals
+        fill.width = sliderWidth * globalVolume;
+        handle.pos.x = sliderLeft + sliderWidth * globalVolume;
+        volumeLabel.text = Math.round(globalVolume * 100) + "%";
+    };
+
+    track.onClick(() => {
+        updateVolumeFromMouse();
+    });
+
+    handle.onHover(() => {
+        k.setCursor("pointer");
+    });
+    handle.onHoverEnd(() => {
+        k.setCursor("default");
+    });
+
+    k.onMouseDown(() => {
+        if (track.isHovering() || handle.isHovering()) {
+            isDraggingVolume = true;
+        }
+    });
+
+    k.onMouseRelease(() => {
+        isDraggingVolume = false;
+    });
+
+    k.onUpdate(() => {
+        if (isDraggingVolume) {
+            updateVolumeFromMouse();
+        }
+    });
+
+    // ---- FULLSCREEN BUTTONS (SIM / NÃO) ----
+    const isFullscreenActive = () => {
+        return !!(document.fullscreenElement || (document as any).webkitFullscreenElement);
+    };
+
+    const toggleFullscreen = (enable: boolean) => {
+        if (enable) {
+            const docEl = document.documentElement;
+            if (docEl.requestFullscreen) {
+                docEl.requestFullscreen();
+            } else if ((docEl as any).webkitRequestFullscreen) {
+                (docEl as any).webkitRequestFullscreen();
+            }
+        } else {
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+            } else if ((document as any).webkitExitFullscreen) {
+                (document as any).webkitExitFullscreen();
+            }
+        }
+        // Force resize recalculation in browser
+        setTimeout(() => {
+            window.dispatchEvent(new Event('resize'));
+        }, 100);
+    };
+
+    let isFull = isFullscreenActive();
+    const btnWidth = 110;
+    const btnHeight = 50;
+    const btnRadius = 25;
+
+    // Sim Button container
+    const btnSim = k.add([
+        k.pos(650, 385),
+        k.area({ shape: new k.Rect(k.vec2(0, 0), btnWidth, btnHeight) }),
+        k.anchor("center"),
+        k.z(100),
+        "toggle_btn"
+    ]);
+
+    // Sim shadow
+    const shadowSim = btnSim.add([
+        k.rect(btnWidth, btnHeight, { radius: btnRadius }),
+        k.pos(0, 6),
+        k.anchor("center"),
+        k.color(),
+    ]);
+
+    // Sim plate
+    const plateSim = btnSim.add([
+        k.rect(btnWidth, btnHeight, { radius: btnRadius }),
+        k.pos(0, 0),
+        k.anchor("center"),
+        k.outline(3, DESIGN.colors.menuPlateOutline),
+        k.color(),
+    ]);
+
+    // Sim label
+    const labelSim = btnSim.add([
+        k.text("Sim", { size: 24, font: "Fredoka", align: "center" }),
+        k.pos(0, 0),
+        k.anchor("center"),
+        k.outline(2, k.rgb(255, 255, 255)),
+        k.color(),
+    ]);
+
+    // Não Button container
+    const btnNao = k.add([
+        k.pos(780, 385),
+        k.area({ shape: new k.Rect(k.vec2(0, 0), btnWidth, btnHeight) }),
+        k.anchor("center"),
+        k.z(100),
+        "toggle_btn"
+    ]);
+
+    // Não shadow
+    const shadowNao = btnNao.add([
+        k.rect(btnWidth, btnHeight, { radius: btnRadius }),
+        k.pos(0, 6),
+        k.anchor("center"),
+        k.color(),
+    ]);
+
+    // Não plate
+    const plateNao = btnNao.add([
+        k.rect(btnWidth, btnHeight, { radius: btnRadius }),
+        k.pos(0, 0),
+        k.anchor("center"),
+        k.outline(3, DESIGN.colors.menuPlateOutline),
+        k.color(),
+    ]);
+
+    // Não label
+    const labelNao = btnNao.add([
+        k.text("Não", { size: 24, font: "Fredoka", align: "center" }),
+        k.pos(0, 0),
+        k.anchor("center"),
+        k.outline(2, k.rgb(255, 255, 255)),
+        k.color(),
+    ]);
+
+    const refreshButtons = () => {
+        const full = isFullscreenActive();
+        
+        // Sim Button Colors
+        shadowSim.color = full ? k.rgb(30, 112, 128) : k.rgb(133, 115, 102);
+        plateSim.color = full ? k.rgb(74, 229, 226) : k.rgb(194, 180, 169);
+        labelSim.color = full ? k.rgb(0, 0, 0) : k.rgb(100, 90, 85);
+
+        // Não Button Colors
+        shadowNao.color = !full ? k.rgb(30, 112, 128) : k.rgb(133, 115, 102);
+        plateNao.color = !full ? k.rgb(74, 229, 226) : k.rgb(194, 180, 169);
+        labelNao.color = !full ? k.rgb(0, 0, 0) : k.rgb(100, 90, 85);
+    };
+
+    refreshButtons();
+
+    btnSim.onClick(() => {
+        plateSim.pos.y = 3;
+        labelSim.pos.y = 3;
+        k.wait(0.1, () => {
+            plateSim.pos.y = 0;
+            labelSim.pos.y = 0;
+            toggleFullscreen(true);
+            k.wait(0.1, () => {
+                refreshButtons();
+            });
         });
     });
+
+    btnNao.onClick(() => {
+        plateNao.pos.y = 3;
+        labelNao.pos.y = 3;
+        k.wait(0.1, () => {
+            plateNao.pos.y = 0;
+            labelNao.pos.y = 0;
+            toggleFullscreen(false);
+            k.wait(0.1, () => {
+                refreshButtons();
+            });
+        });
+    });
+
+    btnSim.onHover(() => {
+        k.setCursor("pointer");
+        if (!isFullscreenActive()) {
+            plateSim.color = k.rgb(214, 200, 189);
+        } else {
+            plateSim.color = k.rgb(53, 181, 235);
+        }
+    });
+    btnSim.onHoverEnd(() => {
+        k.setCursor("default");
+        refreshButtons();
+    });
+
+    btnNao.onHover(() => {
+        k.setCursor("pointer");
+        if (isFullscreenActive()) {
+            plateNao.color = k.rgb(214, 200, 189);
+        } else {
+            plateNao.color = k.rgb(53, 181, 235);
+        }
+    });
+    btnNao.onHoverEnd(() => {
+        k.setCursor("default");
+        refreshButtons();
+    });
+
+    btnSim.onUpdate(() => {
+        const currentFull = isFullscreenActive();
+        if (isFull !== currentFull) {
+            isFull = currentFull;
+            refreshButtons();
+        }
+    });
+
+    const onFullScreenChange = () => {
+        isFull = isFullscreenActive();
+        refreshButtons();
+        setTimeout(() => {
+            window.dispatchEvent(new Event('resize'));
+        }, 150);
+    };
+    document.addEventListener("fullscreenchange", onFullScreenChange);
+    document.addEventListener("webkitfullscreenchange", onFullScreenChange);
+
+    track.onDestroy(() => {
+        document.removeEventListener("fullscreenchange", onFullScreenChange);
+        document.removeEventListener("webkitfullscreenchange", onFullScreenChange);
+    });
+
+    // Botão Voltar
+    createStandardButton("Voltar", k.vec2(k.width() / 2, k.height() - 80), () => k.go("menu"));
 });
 
 k.go("menu");
@@ -816,17 +1273,18 @@ k.scene("gameover", ({ win, reason }: { win: boolean, reason: string }) => {
     k.add([
         k.sprite(win ? "bg_vitoria" : "bg_derrota"),
         k.pos(0,0),
+        k.scale(k.width() / 1280, k.height() / 720),
         k.z(0)
     ]);
 
     // Texto de Motivo + Reiniciar flutuando
     const restartText = k.add([
-        k.text(reason + "\n\nPressione ESPAÇO ou R para focar e voltar ao menu", { size: 32, font: "Fredoka", align: "center" }),
+        k.text(reason + "\n\nPressione ESPAÇO ou R para focar e voltar ao menu", { size: DESIGN.font.hud, font: "Fredoka", align: "center" }),
         k.pos(k.width() / 2, k.height() - 90),
         k.anchor("center"),
-        k.color(255, 255, 255),
+        k.color(DESIGN.colors.white),
         k.opacity(1),
-        k.outline(5, k.rgb(0, 0, 0)),
+        k.outline(5, DESIGN.colors.black),
         k.z(2)
     ]);
 

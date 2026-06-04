@@ -4,15 +4,23 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Cê Ganha ou Cegonha</title>
+    <!-- Fonte sugerida para formato cartunesco: Fredoka One / Fredoka -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@700&display=swap" rel="stylesheet">
     <style>
       body {
         margin: 0;
         overflow: hidden;
         background-color: #000;
+        /* Define a fonte globalmente para garantir o pré-carregamento */
+        font-family: 'Fredoka', sans-serif;
       }
     </style>
-    <script type="module" crossorigin src="./assets/index-CPCoartT.js"></script>
+    <script type="module" crossorigin src="./assets/index-CfuHmqzU.js"></script>
   </head>
-  <body>
+  <body>
+    <!-- Texto invisível para forçar o carregamento da fonte antes do canvas -->
+    <div style="font-family: 'Fredoka'; opacity: 0; position: absolute; z-index: -1;">preload</div>
   </body>
 </html>
