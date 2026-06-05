@@ -747,9 +747,12 @@ k.scene("game", () => {
 
     const loopSpawn = () => {
         k.wait(k.rand(1.5, 3.0), () => {
-            // Limita a quantidade de instâncias geradas pra não entupir de forma punitiva a tela
-            if (k.get("car").length < 6) {
-                spawnCar();
+            // Verifica se não está pausado antes de tentar spawnar
+            if (!isGamePaused) {
+                // Limita a quantidade de instâncias geradas pra não entupir de forma punitiva a tela
+                if (k.get("car").length < 6) {
+                    spawnCar();
+                }
             }
             loopSpawn(); // Chama recursivamente
         });
@@ -789,8 +792,10 @@ k.scene("game", () => {
 
     const loopPotholes = () => {
         k.wait(k.rand(4.0, 5.0), () => {
-            if (k.get("pothole").length < 5) {
-                spawnPothole();
+            if (!isGamePaused) {
+                if (k.get("pothole").length < 5) {
+                    spawnPothole();
+                }
             }
             loopPotholes();
         });
