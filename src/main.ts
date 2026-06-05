@@ -132,10 +132,10 @@ const stopBGM = () => {
     }
 };
 
-// Abafa a BGM durante a pausa (simula efeito de "mundo parado")
+// Pausa a BGM durante a pausa
 const muffleBGM = (muffled: boolean) => {
     if (!_currentBGM) return;
-    _currentBGM.volume = muffled ? 0.08 : 0.25;
+    _currentBGM.paused = muffled;
 };
 
 export const isFullscreenActive = () => {
@@ -260,6 +260,17 @@ k.scene("game", () => {
     };
     playEngineLoop(0);
 
+    // Objeto invisível para parar os loops de áudio ao mudar/reiniciar a cena
+    const audioCleanupHelper = k.add(["audio_cleanup"]);
+    audioCleanupHelper.onDestroy(() => {
+        if (engineSound) {
+            try { engineSound.stop(); } catch (e) {}
+        }
+        if (babyCrySound) {
+            try { babyCrySound.stop(); } catch (e) {}
+        }
+    });
+
     // 1. Constantes da Máquina de Scroll
     const BASE_SCROLL_SPEED = 400;
     const ACCEL_SCROLL_SPEED = 1000;
@@ -283,6 +294,7 @@ k.scene("game", () => {
     let isGameOver = false;
     let distanceTraveled = 0; // Metros
     let timeRemaining = 40;   // Segundos (Arcade Express)
+    let tempoDecorridoReal = 0; // Tempo de gameplay real decorrido
     const TARGET_DISTANCE = 3000; // Distância total para vencer
     let paciencia = 100;
     let babyCrySound: any = null; // Guarda a referência do som de choro
@@ -457,6 +469,7 @@ k.scene("game", () => {
                 k.sprite("seta_correio"),
                 k.pos(0, -60), // Relativo ao centro da caixa
                 k.anchor("center"),
+                k.outline(4, k.rgb(255, 255, 255)), // Contorno branco
                 "seta"
             ]);
         }
@@ -467,7 +480,7 @@ k.scene("game", () => {
             
             const seta = correioSup.get("seta")[0];
             if (seta) {
-                seta.pos.y = -60 + Math.sin(k.time() * 5) * 10;
+                seta.pos.y = -60 + Math.sin(k.time() * 4) * 8; // Flutuação suave
             }
 
             if (correioSup.pos.x < -100) {
@@ -499,6 +512,7 @@ k.scene("game", () => {
                 k.sprite("seta_correio"),
                 k.pos(0, -60),
                 k.anchor("center"),
+                k.outline(4, k.rgb(255, 255, 255)), // Contorno branco
                 "seta"
             ]);
         }
@@ -509,7 +523,7 @@ k.scene("game", () => {
 
             const seta = correioInf.get("seta")[0];
             if (seta) {
-                seta.pos.y = -60 + Math.sin(k.time() * 5) * 10;
+                seta.pos.y = -60 + Math.sin(k.time() * 4) * 8; // Flutuação suave
             }
 
             if (correioInf.pos.x < -100) {
@@ -874,11 +888,15 @@ k.scene("game", () => {
 
         const btnRestart = createStandardButton("Reiniciar Fase", k.vec2(k.width() / 2, 460), () => {
             togglePause();
+            if (engineSound) { try { engineSound.stop(); } catch (e) {} }
+            if (babyCrySound) { try { babyCrySound.stop(); } catch (e) {} }
             k.go("game");
         }, 2001);
 
         const btnQuit = createStandardButton("Sair do Jogo", k.vec2(k.width() / 2, 540), () => {
             togglePause();
+            if (engineSound) { try { engineSound.stop(); } catch (e) {} }
+            if (babyCrySound) { try { babyCrySound.stop(); } catch (e) {} }
             k.go("menu");
         }, 2001);
 
@@ -1244,15 +1262,23 @@ k.scene("game", () => {
             showMainMenu();
 
             muffleBGM(true);
-            if (engineSound) engineSound.paused = true;
-            if (babyCrySound) babyCrySound.paused = true;
+            if (engineSound) {
+                try { engineSound.paused = true; } catch (e) {}
+            }
+            if (babyCrySound) {
+                try { babyCrySound.paused = true; } catch (e) {}
+            }
             try { (k as any).pause && (k as any).pause(); } catch (e) { }
         } else {
             isPaused = false;
             isGamePaused = false;
             muffleBGM(false);
-            if (engineSound) engineSound.paused = false;
-            if (babyCrySound) babyCrySound.paused = false;
+            if (engineSound) {
+                try { engineSound.paused = false; } catch (e) {}
+            }
+            if (babyCrySound) {
+                try { babyCrySound.paused = false; } catch (e) {}
+            }
             
             if (pauseOverlay && pauseOverlay.destroy) pauseOverlay.destroy();
             if (pauseCloseBtn && pauseCloseBtn.destroy) pauseCloseBtn.destroy();
@@ -1266,6 +1292,21 @@ k.scene("game", () => {
     };
 
     k.onKeyPress(["escape", "p"], () => togglePause());
+
+    // Atalho de desenvolvedor: Pressione "V" para vitória instantânea
+    k.onKeyPress("v", () => {
+        if (isGamePaused || isGameOver) return;
+        isGameOver = true;
+        if (babyCrySound) babyCrySound.stop();
+        if (engineSound) engineSound.stop();
+        k.go("gameover", { 
+            win: true, 
+            reason: `Chegou na mãe da criança!\nVocê fez ${entregasFeitas}/7 entregas extra.`, 
+            entregasFeitas, 
+            entregasPerdidas,
+            tempoDecorridoReal
+        });
+    });
 
     // Lógica de Entrega (Arcade Express)
     k.onKeyPress(["space", "e"], () => {
@@ -1421,6 +1462,7 @@ k.scene("game", () => {
 
         // Tempo e Distância
         timeRemaining -= k.dt();
+        tempoDecorridoReal += k.dt();
         distanceTraveled += (currentScrollSpeed / 10) * k.dt(); // 10 px = 1 metro
         
         // Atualiza a UI do Relógio
@@ -1439,17 +1481,17 @@ k.scene("game", () => {
                 isGameOver = true;
                 if (babyCrySound) babyCrySound.stop();
                 if (engineSound) engineSound.stop();
-                k.go("gameover", { win: false, reason: "A paciência esgotou! O bebê chorou muito e você perdeu.", entregasFeitas, entregasPerdidas });
+                k.go("gameover", { win: false, reason: "A paciência esgotou! O bebê chorou muito e você perdeu.", entregasFeitas, entregasPerdidas, tempoDecorridoReal });
             } else if (distanceTraveled >= TARGET_DISTANCE) {
                 isGameOver = true;
                 if (babyCrySound) babyCrySound.stop();
                 if (engineSound) engineSound.stop();
-                k.go("gameover", { win: true, reason: `Chegou na mãe da criança!\nVocê fez ${entregasFeitas}/7 entregas extra.`, entregasFeitas, entregasPerdidas });
+                k.go("gameover", { win: true, reason: `Chegou na mãe da criança!\nVocê fez ${entregasFeitas}/7 entregas extra.`, entregasFeitas, entregasPerdidas, tempoDecorridoReal });
             } else if (timeRemaining <= 0) {
                 isGameOver = true;
                 if (babyCrySound) babyCrySound.stop();
                 if (engineSound) engineSound.stop();
-                k.go("gameover", { win: false, reason: "O tempo acabou! Você demorou demais.", entregasFeitas, entregasPerdidas });
+                k.go("gameover", { win: false, reason: "O tempo acabou! Você demorou demais.", entregasFeitas, entregasPerdidas, tempoDecorridoReal });
             }
         }
 
@@ -1939,7 +1981,7 @@ k.scene("start", () => {
 k.go("start");
 
 // ---- CENA DE GAME OVER / VITORIA ----
-k.scene("gameover", ({ win, reason, entregasFeitas, entregasPerdidas }: { win: boolean, reason: string, entregasFeitas?: number, entregasPerdidas?: number }) => {
+k.scene("gameover", ({ win, entregasFeitas, entregasPerdidas, tempoDecorridoReal }: { win: boolean, reason?: string, entregasFeitas?: number, entregasPerdidas?: number, tempoDecorridoReal?: number }) => {
     // ---- JINGLE DE VITÓRIA OU DERROTA ----
     stopBGM();
     k.play(win ? "jingle_vitoria" : "jingle_derrota", { loop: false, volume: 0.8 });
@@ -1988,21 +2030,76 @@ k.scene("gameover", ({ win, reason, entregasFeitas, entregasPerdidas }: { win: b
         // Atalho rápido opcional pelo teclado
         k.onKeyPress(["space", "r"], () => k.go("game"));
     } else {
-        // Texto de Vitória Flutuante Padrão
-        const restartText = k.add([
-            k.text(reason + "\n\nPressione ESPAÇO ou R para voltar ao menu", { size: DESIGN.font.hud, font: "Fredoka", align: "center" }),
-            k.pos(k.width() / 2, k.height() - 90),
+        // 1. TÍTULO "ENTREGA CONCLUÍDA!" NO TOPO
+        k.add([
+            k.text("ENTREGA CONCLUÍDA!", { size: 38, font: "Fredoka" }),
+            k.pos(k.width() / 2, 45),
             k.anchor("center"),
-            k.color(DESIGN.colors.white),
-            k.opacity(1),
-            k.outline(5, DESIGN.colors.black),
+            k.color(255, 215, 80), // Amarelo-ouro
+            k.outline(5, k.rgb(80, 40, 10)), // Outline marrom escuro de 5px
             k.z(2)
         ]);
 
-        restartText.onUpdate(() => {
-            restartText.opacity = Math.floor(k.time() * 3) % 2 === 0 ? 1 : 0.4;
-        });
+        // 2. ESTATÍSTICAS (Linha única compacta) - y: height - 148
+        const tempoGasto = Math.max(0, Math.round(tempoDecorridoReal || 0));
+        k.add([
+            k.text(`Entregas: ${entregasFeitas || 0} de 7  ·  Tempo: ${tempoGasto}s`, { size: 20, font: "Fredoka", align: "center" }),
+            k.pos(k.width() / 2, k.height() - 148),
+            k.anchor("center"),
+            k.color(255, 255, 255),
+            k.outline(3, k.rgb(0, 0, 0)),
+            k.z(2)
+        ]);
 
-        k.onKeyPress(["r", "space"], () => k.go("menu"));
+        // 3. ESTRELAS DE AVALIAÇÃO (5 estrelas) - y: height - 118
+        let stars = 1;
+        const e = entregasFeitas || 0;
+        const tempoReal = tempoDecorridoReal || 0;
+        if (e >= 1 && e <= 3) stars = 1;
+        else if (e >= 4 && e <= 5) stars = 2;
+        else if (e === 6) stars = 3;
+        else if (e === 7) {
+            if (tempoReal < 50) stars = 5;
+            else stars = 4;
+        }
+
+        const starSize = 28;
+        const starSpacing = 32;
+        const startX = k.width() / 2 - 2 * starSpacing;
+        const starY = k.height() - 118;
+        for (let i = 0; i < 5; i++) {
+            const isFilled = i < stars;
+            k.add([
+                k.text(isFilled ? "★" : "☆", { size: starSize, font: "Fredoka" }),
+                k.pos(startX + i * starSpacing, starY),
+                k.anchor("center"),
+                k.color(isFilled ? k.rgb(255, 215, 80) : k.rgb(100, 80, 60)),
+                k.z(2)
+            ]);
+        }
+
+        // 4. FRASE DE FEEDBACK - y: height - 88
+        let feedbackText = "";
+        if (stars === 1) feedbackText = "Pelo menos a bebê chegou inteira...";
+        else if (stars === 2) feedbackText = "Deu pro gasto. Mas o chefe não ficou feliz.";
+        else if (stars === 3) feedbackText = "Bom trabalho, carteira!";
+        else if (stars === 4) feedbackText = "Impressionante! Nenhum pacote ficou pra trás.";
+        else if (stars === 5) feedbackText = "Cegonha profissional! Entrega perfeita!";
+
+        k.add([
+            k.text(feedbackText, { size: 16, font: "Fredoka", align: "center" }),
+            k.pos(k.width() / 2, k.height() - 88),
+            k.anchor("center"),
+            k.color(255, 255, 255),
+            k.outline(2, k.rgb(0, 0, 0)),
+            k.z(2)
+        ]);
+
+        // 5. BOTÕES (lado a lado) - y: height - 45, largura 280px, altura 50px, fonte 28, gap de 20px
+        createStandardButton("Jogar Novamente", k.vec2(k.width() / 2 - 150, k.height() - 45), () => k.go("cutscene"), 5, 280, 50, 28);
+        createStandardButton("Menu Principal", k.vec2(k.width() / 2 + 150, k.height() - 45), () => k.go("menu"), 5, 280, 50, 28);
+
+        // Atalho rápido opcional pelo teclado
+        k.onKeyPress(["space", "r"], () => k.go("cutscene"));
     }
 });
