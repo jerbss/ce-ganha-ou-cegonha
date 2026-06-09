@@ -80,7 +80,8 @@ k.loadSprite("ui_surto", "./assets/ui_bebe_estressada.png");
 k.loadSprite("seta_correio", "./assets/spr_seta_correio.png");
 // Novos backgrounds de telas (padronizados)
 k.loadSprite("bg_menu_pausa", "./assets/bg_menu_pausa.png");
-k.loadSprite("bg_instrucoes", "./assets/bg_instrucoes.png");
+k.loadSprite("bg_instrucoes_1", "./assets/instrucoes_1.png");
+k.loadSprite("bg_instrucoes_2", "./assets/instrucoes_2.png");
 k.loadSprite("bg_configuracoes", "./assets/bg_configuracoes.png");
 
 // ---- ÁUDIO: Carregamento dos BGMs ----
@@ -175,11 +176,31 @@ export function createStandardButton(text: string, pos: any, action: () => void,
         k.pos(pos),
         k.area({ shape: new k.Rect(k.vec2(-btnWidth / 2, -btnHeight / 2), btnWidth, btnHeight) }),
         k.z(zIndex),
-        "standard_btn"
+        "standard_btn",
+        {
+            disabled: false,
+            shadowObj: null as any,
+            plateObj: null as any,
+            labelObj: null as any,
+            setDisabled(val: boolean) {
+                const self = this as any;
+                self.disabled = val;
+                
+                if (val) {
+                    if (self.plateObj) self.plateObj.color = k.rgb(180, 180, 180);
+                    if (self.shadowObj) self.shadowObj.color = k.rgb(120, 120, 120);
+                    if (self.labelObj) self.labelObj.color = k.rgb(100, 100, 100);
+                } else {
+                    if (self.plateObj) self.plateObj.color = k.rgb(74, 229, 226);
+                    if (self.shadowObj) self.shadowObj.color = k.rgb(30, 112, 128);
+                    if (self.labelObj) self.labelObj.color = k.rgb(0, 0, 0);
+                }
+            }
+        }
     ]);
 
     // 1. Sombra / Placa de fundo escurecida (efeito 3D flat)
-    btn.add([
+    const shadow = btn.add([
         k.rect(btnWidth, btnHeight, { radius: btnRadius }),
         k.pos(0, shadowOffset), // Deslocado proporcionalmente para baixo
         k.anchor("center"),
@@ -207,8 +228,13 @@ export function createStandardButton(text: string, pos: any, action: () => void,
         k.outline(4, k.rgb(255, 255, 255)), // Contorno branco espesso
     ]);
 
+    (btn as any).shadowObj = shadow;
+    (btn as any).plateObj = plate;
+    (btn as any).labelObj = label;
+
     // Efeitos de Hover
     btn.onHover(() => {
+        if (btn.disabled) return;
         if (plate.color.r !== 53) { // Toca o som apenas na transição inicial de hover
             k.play("sfx_hover", { volume: 0.5 });
         }
@@ -217,12 +243,14 @@ export function createStandardButton(text: string, pos: any, action: () => void,
     });
 
     btn.onHoverEnd(() => {
+        if (btn.disabled) return;
         plate.color = k.rgb(74, 229, 226); // Volta ao ciano
         k.setCursor("default");
     });
 
     // Ação de Clique
     btn.onClick(() => {
+        if (btn.disabled) return;
         k.play("sfx_click", { volume: 0.6 });
         // Efeito de "pressão"
         plate.pos.y = Math.round(btnHeight * 0.067); // 4px para botão de 60px, 3px para botão de 50px
@@ -1194,20 +1222,45 @@ k.scene("game", () => {
         pauseUIObjects.forEach(obj => obj.destroy && obj.destroy());
         pauseUIObjects = [];
 
+        let currentInstrPage = 0;
+        const instrSprites = ["bg_instrucoes_1", "bg_instrucoes_2"];
+
         const bgInst = k.add([
-            k.sprite("bg_instrucoes"),
+            k.sprite(instrSprites[0]),
             k.pos(k.width() / 2, k.height() / 2),
             k.anchor("center"),
             k.scale(k.width() / 3840, k.height() / 2160),
             k.z(2100)
         ]);
 
+        const btnAnterior = createStandardButton("Anterior", k.vec2(k.width() / 2 - 220, k.height() - 80), () => {
+            if (currentInstrPage > 0) {
+                currentInstrPage--;
+                bgInst.use(k.sprite(instrSprites[currentInstrPage]));
+                updateBtnStates();
+            }
+        }, 2101, 200, 54, 30);
+
         const btnVoltar = createStandardButton("Voltar", k.vec2(k.width() / 2, k.height() - 80), () => {
             bgInst.destroy();
             showMainMenu();
-        }, 2101);
+        }, 2101, 200, 54, 30);
 
-        pauseUIObjects.push(bgInst, btnVoltar);
+        const btnProximo = createStandardButton("Próximo", k.vec2(k.width() / 2 + 220, k.height() - 80), () => {
+            if (currentInstrPage < instrSprites.length - 1) {
+                currentInstrPage++;
+                bgInst.use(k.sprite(instrSprites[currentInstrPage]));
+                updateBtnStates();
+            }
+        }, 2101, 200, 54, 30);
+
+        const updateBtnStates = () => {
+            (btnAnterior as any).setDisabled(currentInstrPage === 0);
+            (btnProximo as any).setDisabled(currentInstrPage === instrSprites.length - 1);
+        };
+        updateBtnStates();
+
+        pauseUIObjects.push(bgInst, btnAnterior, btnVoltar, btnProximo);
     };
 
     const togglePause = () => {
@@ -1671,15 +1724,42 @@ k.scene("menu", () => {
 
 // ---- CENAS DE INSTRUÇÕES E CONFIGURAÇÕES ----
 k.scene("instrucoes", () => {
-    k.add([
-        k.sprite("bg_instrucoes"),
+    let currentInstrPage = 0;
+    const instrSprites = ["bg_instrucoes_1", "bg_instrucoes_2"];
+
+    const bgInstr = k.add([
+        k.sprite(instrSprites[0]),
         k.pos(0, 0),
         k.scale(k.width() / 3840, k.height() / 2160),
         k.z(0)
     ]);
 
+    // Botão Anterior
+    const btnAnterior = createStandardButton("Anterior", k.vec2(k.width() / 2 - 220, k.height() - 80), () => {
+        if (currentInstrPage > 0) {
+            currentInstrPage--;
+            bgInstr.use(k.sprite(instrSprites[currentInstrPage]));
+            updateBtnStates();
+        }
+    }, 100, 200, 54, 30);
+
     // Botão Voltar
-    createStandardButton("Voltar", k.vec2(k.width() / 2, k.height() - 80), () => k.go("menu"));
+    createStandardButton("Voltar", k.vec2(k.width() / 2, k.height() - 80), () => k.go("menu"), 100, 200, 54, 30);
+
+    // Botão Próximo
+    const btnProximo = createStandardButton("Próximo", k.vec2(k.width() / 2 + 220, k.height() - 80), () => {
+        if (currentInstrPage < instrSprites.length - 1) {
+            currentInstrPage++;
+            bgInstr.use(k.sprite(instrSprites[currentInstrPage]));
+            updateBtnStates();
+        }
+    }, 100, 200, 54, 30);
+
+    const updateBtnStates = () => {
+        (btnAnterior as any).setDisabled(currentInstrPage === 0);
+        (btnProximo as any).setDisabled(currentInstrPage === instrSprites.length - 1);
+    };
+    updateBtnStates();
 });
 
 k.scene("configuracoes", () => {
