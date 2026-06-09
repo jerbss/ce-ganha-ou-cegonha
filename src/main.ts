@@ -455,6 +455,42 @@ k.scene("game", () => {
         k.color(50, 50, 50)
     ]);
 
+    // ---- BOLINHAS DE ENTREGA (abaixo do caderno) ----
+    let deliveryIndex = 0; // Índice sequencial da próxima entrega
+    const dotRadius = 6;
+    // Caderno: pos(1260, 20), anchor topright, scale 1.5 => 96x96px
+    // Borda esquerda = 1260 - 96 = 1164, Borda direita = 1260, Base = 20 + 96 = 116
+    const cadernoLeft = k.width() - 20 - 96 + dotRadius; // 1164 + margem do raio
+    const cadernoRight = k.width() - 20 - dotRadius;      // 1260 - margem do raio
+    const dotSpacing = (cadernoRight - cadernoLeft) / (TOTAL_ENTREGAS - 1);
+    const dotsY = 124; // Logo abaixo do caderno (116 + 8px gap)
+
+    const deliveryDots: any[] = [];
+    for (let i = 0; i < TOTAL_ENTREGAS; i++) {
+        const dot = k.add([
+            k.circle(dotRadius),
+            k.pos(cadernoLeft + i * dotSpacing, dotsY),
+            k.anchor("center"),
+            k.color(160, 160, 160), // Cinza neutro (sem resultado ainda)
+            k.outline(2, k.rgb(80, 80, 80)),
+            k.fixed(),
+            k.z(1000)
+        ]);
+        deliveryDots.push(dot);
+    }
+
+    const markDeliveryDot = (index: number, success: boolean) => {
+        if (index >= 0 && index < deliveryDots.length) {
+            if (success) {
+                deliveryDots[index].color = k.rgb(50, 205, 50); // Verde mais vivo (estilo semáforo)
+                deliveryDots[index].outline.color = k.rgb(34, 139, 34); // Contorno verde escuro
+            } else {
+                deliveryDots[index].color = k.rgb(230, 57, 70); // Vermelho
+                deliveryDots[index].outline.color = k.rgb(140, 30, 40);
+            }
+        }
+    };
+
     // ---- SPAWNER DE CAIXAS DE CORREIO (Sincronizado com o Loop do Cenário) ----
     // bg_cenario_loop.png tem 2560px com 40 blocos (64px cada)
     // Padrão: Claro, Escuro, Claro, Escuro, ... Escuro
@@ -516,6 +552,8 @@ k.scene("game", () => {
                 if (correioSup.isTarget && !correioSup.delivered && !correioSup.missed) {
                     correioSup.missed = true;
                     entregasPerdidas++;
+                    markDeliveryDot(deliveryIndex, false);
+                    deliveryIndex++;
                     paciencia -= 20; // Penalidade Grave
                     k.play("sfx_entrega_fracasso", { volume: 0.5 });
                 }
@@ -560,6 +598,8 @@ k.scene("game", () => {
                 if (correioInf.isTarget && !correioInf.delivered && !correioInf.missed) {
                     correioInf.missed = true;
                     entregasPerdidas++;
+                    markDeliveryDot(deliveryIndex, false);
+                    deliveryIndex++;
                     paciencia -= 20; // Penalidade Grave
                     k.play("sfx_entrega_fracasso", { volume: 0.5 });
                 }
@@ -1391,6 +1431,8 @@ k.scene("game", () => {
                         c.delivered = true;
                         entregasFeitas++;
                         entregasTextoHUD.text = `${entregasFeitas}/7`;
+                        markDeliveryDot(deliveryIndex, true);
+                        deliveryIndex++;
 
                         timeRemaining += 10;
                         paciencia = Math.min(100, paciencia + 10);
