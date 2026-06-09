@@ -85,11 +85,11 @@ k.loadSprite("bg_instrucoes_2", "./assets/instrucoes_2.png");
 k.loadSprite("bg_configuracoes", "./assets/bg_configuracoes.png");
 
 // ---- ÁUDIO: Carregamento dos BGMs ----
-k.loadSound("bgm_menu",      "./assets/tela-inicial.mp3");
-k.loadSound("bgm_gameplay",  "./assets/gameplay.mp3");
-k.loadSound("bgm_cutscene",  "./assets/cutscene.ogg");
-k.loadSound("jingle_vitoria","./assets/vitoria.mp3");
-k.loadSound("jingle_derrota","./assets/derrota.wav");
+k.loadSound("bgm_menu", "./assets/tela-inicial.mp3");
+k.loadSound("bgm_gameplay", "./assets/gameplay.mp3");
+k.loadSound("bgm_cutscene", "./assets/cutscene.ogg");
+k.loadSound("jingle_vitoria", "./assets/vitoria.mp3");
+k.loadSound("jingle_derrota", "./assets/derrota.wav");
 
 // ---- ÁUDIO: Carregamento de SFX ----
 k.loadSound("sfx_hover", "./assets/rollover-menu.wav");
@@ -119,7 +119,7 @@ const playBGM = (key: string, loop = true, volume = 0.25) => {
     if (_currentBGMKey === key && _currentBGM) return;
     // Para a faixa anterior
     if (_currentBGM) {
-        try { _currentBGM.stop(); } catch (e) {}
+        try { _currentBGM.stop(); } catch (e) { }
     }
     _currentBGM = k.play(key, { loop, volume });
     _currentBGMKey = key;
@@ -127,7 +127,7 @@ const playBGM = (key: string, loop = true, volume = 0.25) => {
 
 const stopBGM = () => {
     if (_currentBGM) {
-        try { _currentBGM.stop(); } catch (e) {}
+        try { _currentBGM.stop(); } catch (e) { }
         _currentBGM = null;
         _currentBGMKey = null;
     }
@@ -185,7 +185,7 @@ export function createStandardButton(text: string, pos: any, action: () => void,
             setDisabled(val: boolean) {
                 const self = this as any;
                 self.disabled = val;
-                
+
                 if (val) {
                     if (self.plateObj) self.plateObj.color = k.rgb(180, 180, 180);
                     if (self.shadowObj) self.shadowObj.color = k.rgb(120, 120, 120);
@@ -255,7 +255,7 @@ export function createStandardButton(text: string, pos: any, action: () => void,
         // Efeito de "pressão"
         plate.pos.y = Math.round(btnHeight * 0.067); // 4px para botão de 60px, 3px para botão de 50px
         label.pos.y = Math.round(btnHeight * 0.067);
-        
+
         k.wait(0.1, () => {
             plate.pos.y = 0;
             label.pos.y = 0;
@@ -292,10 +292,10 @@ k.scene("game", () => {
     const audioCleanupHelper = k.add(["audio_cleanup"]);
     audioCleanupHelper.onDestroy(() => {
         if (engineSound) {
-            try { engineSound.stop(); } catch (e) {}
+            try { engineSound.stop(); } catch (e) { }
         }
         if (babyCrySound) {
-            try { babyCrySound.stop(); } catch (e) {}
+            try { babyCrySound.stop(); } catch (e) { }
         }
     });
 
@@ -382,7 +382,7 @@ k.scene("game", () => {
         // bg1.width pode estar indefinido logo no frame zero (se não usasse load antes).
         // 1280 é a largura de fallback
         const bgW = bg1.width || 1280;
-        
+
         // bg2 gruda no final do bg1 (a posição X base dos 2 deve variar entre 0 e -1280 (largura))
         bg1.move(-currentScrollSpeed, 0);
         bg2.move(-currentScrollSpeed, 0);
@@ -403,7 +403,7 @@ k.scene("game", () => {
         k.fixed(),
         k.z(1000)
     ]);
-    
+
     k.add([
         k.rect(340, 32, { radius: DESIGN.radius.large }),
         k.pos(150, 44),
@@ -411,7 +411,7 @@ k.scene("game", () => {
         k.fixed(),
         k.z(1000)
     ]);
-    
+
     // Preenchimento verde da barra
     const barraPacienciaUI = k.add([
         k.rect(332, 24, { radius: DESIGN.radius.small }),
@@ -420,7 +420,7 @@ k.scene("game", () => {
         k.fixed(),
         k.z(1001)
     ]);
-    
+
     // Relógio (Topo Centro)
     const relogioContainer = k.add([
         k.rect(140, 50, { radius: DESIGN.radius.large }),
@@ -430,14 +430,14 @@ k.scene("game", () => {
         k.fixed(),
         k.z(1000)
     ]);
-    
+
     const relogioTextoHUD = relogioContainer.add([
         k.text("40s", { size: 36, font: "Fredoka" }),
         k.anchor("center"),
         k.color(DESIGN.colors.white),
         k.pos(0, 0)
     ]);
-    
+
     // Caderno (Topo Direito)
     const cadernoHUD = k.add([
         k.sprite("ui_caderno"),
@@ -459,19 +459,19 @@ k.scene("game", () => {
     // bg_cenario_loop.png tem 2560px com 40 blocos (64px cada)
     // Padrão: Claro, Escuro, Claro, Escuro, ... Escuro
     // Blocos escuros: a cada 128px (1 claro + 1 escuro)
-    
+
     let toggleSpriteCorreio = true;
     const DIST_ENTRE_CORREIOS = 128; // Um par de blocos (claro + escuro)
     let distAccumCorreio = 0;
-    
+
     const spawnCorreioPair = (startX?: number) => {
         // Se x não for passado, calcula a posição exata baseada na borda direita menos o excesso de percurso
         const xPos = startX !== undefined ? startX : k.width() + 96 - distAccumCorreio;
-        
+
         // LÓGICA ARCADE EXPRESS: Checar se spawnamos um alvo
         let isTargetSup = false;
         let isTargetInf = false;
-        
+
         if (targetsSpawned < TOTAL_ENTREGAS && distanceTraveled >= lastTargetSpawnDistance + TARGET_SPAWN_INTERVAL) {
             lastTargetSpawnDistance += TARGET_SPAWN_INTERVAL;
             targetsSpawned++;
@@ -482,7 +482,7 @@ k.scene("game", () => {
         // CORREIO SUPERIOR (Topo da Calçada)
         const spriteSup = toggleSpriteCorreio ? "correio_1" : "correio_2";
         const yPosSup = 236; // Topo da calçada corrigido
-        
+
         const correioSup = k.add([
             k.sprite(spriteSup),
             k.pos(xPos, yPosSup),
@@ -491,21 +491,22 @@ k.scene("game", () => {
             "correio",
             { isTarget: isTargetSup, delivered: false, missed: false }
         ]);
-        
+
         if (isTargetSup) {
             correioSup.add([
                 k.sprite("seta_correio"),
                 k.pos(0, -60), // Relativo ao centro da caixa
                 k.anchor("center"),
+                k.scale(0.5),
                 k.outline(4, k.rgb(255, 255, 255)), // Contorno branco
                 "seta"
             ]);
         }
-        
+
         correioSup.onUpdate(() => {
             if (isGamePaused) return;
             correioSup.move(-currentScrollSpeed, 0);
-            
+
             const seta = correioSup.get("seta")[0];
             if (seta) {
                 seta.pos.y = -60 + Math.sin(k.time() * 4) * 8; // Flutuação suave
@@ -521,11 +522,11 @@ k.scene("game", () => {
                 correioSup.destroy();
             }
         });
-        
+
         // CORREIO INFERIOR (Base da Calçada)
         const spriteInf = toggleSpriteCorreio ? "correio_2" : "correio_1";
         const yPosInf = 680;
-        
+
         const correioInf = k.add([
             k.sprite(spriteInf),
             k.pos(xPos, yPosInf),
@@ -534,17 +535,18 @@ k.scene("game", () => {
             "correio",
             { isTarget: isTargetInf, delivered: false, missed: false }
         ]);
-        
+
         if (isTargetInf) {
             correioInf.add([
                 k.sprite("seta_correio"),
                 k.pos(0, -60),
                 k.anchor("center"),
+                k.scale(0.6),
                 k.outline(4, k.rgb(255, 255, 255)), // Contorno branco
                 "seta"
             ]);
         }
-        
+
         correioInf.onUpdate(() => {
             if (isGamePaused) return;
             correioInf.move(-currentScrollSpeed, 0);
@@ -576,7 +578,7 @@ k.scene("game", () => {
     k.onUpdate(() => {
         if (isGamePaused) return;
         distAccumCorreio += currentScrollSpeed * k.dt();
-        while (distAccumCorreio >= DIST_ENTRE_CORREIOS) { 
+        while (distAccumCorreio >= DIST_ENTRE_CORREIOS) {
             distAccumCorreio -= DIST_ENTRE_CORREIOS;
             spawnCorreioPair();
         }
@@ -609,7 +611,7 @@ k.scene("game", () => {
     const spawnCar = () => {
         const carLanes = [0, 2, 4]; // Apenas faixas PAR
         const pickedLane = carLanes[Math.floor(k.rand(0, carLanes.length))];
-        
+
         const randVal = Math.random();
         let archetype;
 
@@ -879,17 +881,17 @@ k.scene("game", () => {
     const moveLane = (dir: number) => {
         if (isChangingLane) return;
         const nextLane = currentLane + dir;
-        
+
         if (nextLane >= 0 && nextLane < LANES.length) {
             isChangingLane = true;
             currentLane = nextLane;
             const laneTweenDuration = 0.12;
-            
+
             k.tween(
-                player.pos.y, 
-                LANES[currentLane] - MOTO_Y_OFFSET, 
-                laneTweenDuration, 
-                (val) => player.pos.y = val, 
+                player.pos.y,
+                LANES[currentLane] - MOTO_Y_OFFSET,
+                laneTweenDuration,
+                (val) => player.pos.y = val,
                 k.easings.easeOutQuad
             ).onEnd(() => {
                 isChangingLane = false;
@@ -921,15 +923,15 @@ k.scene("game", () => {
 
         const btnRestart = createStandardButton("Reiniciar Fase", k.vec2(k.width() / 2, 460), () => {
             togglePause();
-            if (engineSound) { try { engineSound.stop(); } catch (e) {} }
-            if (babyCrySound) { try { babyCrySound.stop(); } catch (e) {} }
+            if (engineSound) { try { engineSound.stop(); } catch (e) { } }
+            if (babyCrySound) { try { babyCrySound.stop(); } catch (e) { } }
             k.go("game");
         }, 2001);
 
         const btnQuit = createStandardButton("Sair do Jogo", k.vec2(k.width() / 2, 540), () => {
             togglePause();
-            if (engineSound) { try { engineSound.stop(); } catch (e) {} }
-            if (babyCrySound) { try { babyCrySound.stop(); } catch (e) {} }
+            if (engineSound) { try { engineSound.stop(); } catch (e) { } }
+            if (babyCrySound) { try { babyCrySound.stop(); } catch (e) { } }
             k.go("menu");
         }, 2001);
 
@@ -1010,7 +1012,7 @@ k.scene("game", () => {
             pct = Math.max(0, Math.min(1, pct));
             globalVolume = pct;
             k.volume(globalVolume);
-            
+
             fill.width = sliderWidth * globalVolume;
             handle.pos.x = sliderLeft + sliderWidth * globalVolume;
             volumeLabel.text = Math.round(globalVolume * 100) + "%";
@@ -1267,7 +1269,7 @@ k.scene("game", () => {
         if (!isPaused) {
             isPaused = true;
             isGamePaused = true;
-            
+
             pauseOverlay = k.add([
                 k.sprite("bg_menu_pausa"),
                 k.pos(k.width() / 2, k.height() / 2),
@@ -1321,10 +1323,10 @@ k.scene("game", () => {
 
             muffleBGM(true);
             if (engineSound) {
-                try { engineSound.paused = true; } catch (e) {}
+                try { engineSound.paused = true; } catch (e) { }
             }
             if (babyCrySound) {
-                try { babyCrySound.paused = true; } catch (e) {}
+                try { babyCrySound.paused = true; } catch (e) { }
             }
             try { (k as any).pause && (k as any).pause(); } catch (e) { }
         } else {
@@ -1332,16 +1334,16 @@ k.scene("game", () => {
             isGamePaused = false;
             muffleBGM(false);
             if (engineSound) {
-                try { engineSound.paused = false; } catch (e) {}
+                try { engineSound.paused = false; } catch (e) { }
             }
             if (babyCrySound) {
-                try { babyCrySound.paused = false; } catch (e) {}
+                try { babyCrySound.paused = false; } catch (e) { }
             }
-            
+
             if (pauseOverlay && pauseOverlay.destroy) pauseOverlay.destroy();
             if (pauseCloseBtn && pauseCloseBtn.destroy) pauseCloseBtn.destroy();
             pauseUIObjects.forEach(obj => obj.destroy && obj.destroy());
-            
+
             pauseOverlay = pauseCloseBtn = null;
             pauseUIObjects = [];
 
@@ -1357,10 +1359,10 @@ k.scene("game", () => {
         isGameOver = true;
         if (babyCrySound) babyCrySound.stop();
         if (engineSound) engineSound.stop();
-        k.go("gameover", { 
-            win: true, 
-            reason: `Chegou na mãe da criança!\nVocê fez ${entregasFeitas}/7 entregas extra.`, 
-            entregasFeitas, 
+        k.go("gameover", {
+            win: true,
+            reason: `Chegou na mãe da criança!\nVocê fez ${entregasFeitas}/7 entregas extra.`,
+            entregasFeitas,
             entregasPerdidas,
             tempoDecorridoReal
         });
@@ -1369,10 +1371,10 @@ k.scene("game", () => {
     // Lógica de Entrega (Arcade Express)
     k.onKeyPress(["space", "e"], () => {
         if (isGamePaused || isGameOver) return;
-        
+
         // Apenas as faixas 0 (Cima) e 4 (Baixo) permitem entregas
         if (currentLane !== 0 && currentLane !== 4) return;
-        
+
         const correios = k.get("correio");
         let entregou = false;
 
@@ -1384,17 +1386,17 @@ k.scene("game", () => {
                     // Checar se o player está na calçada correta
                     // Correio superior tem y = 236. Inferior = 680
                     const isTopMailbox = c.pos.y < 400;
-                    
+
                     if ((isTopMailbox && currentLane === 0) || (!isTopMailbox && currentLane === 4)) {
                         c.delivered = true;
                         entregasFeitas++;
                         entregasTextoHUD.text = `${entregasFeitas}/7`;
-                        
+
                         timeRemaining += 10;
                         paciencia = Math.min(100, paciencia + 10);
-                        
+
                         k.play("sfx_entrega_sucesso", { volume: 0.6 });
-                        
+
                         // Remover a seta visualmente
                         const seta = c.get("seta")[0];
                         if (seta) seta.destroy();
@@ -1407,12 +1409,12 @@ k.scene("game", () => {
                             k.anchor("center"),
                             k.opacity(1) // Obrigatório para a opacidade funcionar no onUpdate
                         ]);
-                        
+
                         feedbackTempo.onUpdate(() => {
                             feedbackTempo.pos.y -= 150 * k.dt();
                             feedbackTempo.opacity = Math.max(0, feedbackTempo.opacity - k.dt());
                         });
-                        
+
                         k.wait(1, () => {
                             feedbackTempo.destroy();
                         });
@@ -1466,7 +1468,7 @@ k.scene("game", () => {
         }
 
         // Corridor rule: short grace window for overtaking, then heavy penalty
-        if (currentLane % 2 !== 0) { 
+        if (currentLane % 2 !== 0) {
             corridorTimer += k.dt();
             if (corridorTimer > CORRIDOR_GRACE) {
                 targetSpeed = BASE_SCROLL_SPEED * 0.5; // Heavy slow after grace
@@ -1493,13 +1495,13 @@ k.scene("game", () => {
             paciencia -= 5 * k.dt();
         } else if (currentScrollSpeed < BASE_SCROLL_SPEED + 50) {
             // Frear/Ir devagar alivia o estresse e a criança recupera a paciência
-            paciencia += 4 * k.dt(); 
+            paciencia += 4 * k.dt();
         }
         paciencia = Math.min(100, Math.max(0, paciencia));
 
         // Atualização Visual da Interface (Rosto e Barra)
         barraPacienciaUI.width = (paciencia / 100) * 332;
-        
+
         if (paciencia > 60) {
             barraPacienciaUI.color = DESIGN.colors.primary; // Verde (Saudável)
             rostoBebeUI.use(k.sprite("ui_feliz"));
@@ -1522,7 +1524,7 @@ k.scene("game", () => {
         timeRemaining -= k.dt();
         tempoDecorridoReal += k.dt();
         distanceTraveled += (currentScrollSpeed / 10) * k.dt(); // 10 px = 1 metro
-        
+
         // Atualiza a UI do Relógio
         relogioTextoHUD.text = `${Math.ceil(Math.max(0, timeRemaining))}s`;
         if (timeRemaining <= 10) {
@@ -1826,7 +1828,7 @@ k.scene("configuracoes", () => {
         pct = Math.max(0, Math.min(1, pct));
         globalVolume = pct;
         k.volume(globalVolume);
-        
+
         // Update visuals
         fill.width = sliderWidth * globalVolume;
         handle.pos.x = sliderLeft + sliderWidth * globalVolume;
@@ -1940,7 +1942,7 @@ k.scene("configuracoes", () => {
 
     const refreshButtons = () => {
         const full = isFullscreenActive();
-        
+
         // Sim Button Colors
         shadowSim.color = full ? k.rgb(30, 112, 128) : k.rgb(133, 115, 102);
         plateSim.color = full ? k.rgb(74, 229, 226) : k.rgb(194, 180, 169);
@@ -2073,7 +2075,7 @@ k.scene("gameover", ({ win, entregasFeitas, entregasPerdidas, tempoDecorridoReal
 
     k.add([
         k.sprite(win ? "bg_vitoria" : "bg_derrota"),
-        k.pos(0,0),
+        k.pos(0, 0),
         k.scale(k.width() / 1280, k.height() / 720),
         k.z(0)
     ]);
@@ -2111,7 +2113,7 @@ k.scene("gameover", ({ win, entregasFeitas, entregasPerdidas, tempoDecorridoReal
         // 3. BOTÕES (lado a lado) - y: height - 60, largura 260px (mínimo 250px), altura 50px, fonte 28
         createStandardButton("Tentar Novamente", k.vec2(k.width() / 2 - 140, k.height() - 60), () => k.go("game"), 5, 260, 50, 28);
         createStandardButton("Pedir Demissão", k.vec2(k.width() / 2 + 140, k.height() - 60), () => k.go("menu"), 5, 260, 50, 28);
-        
+
         // Atalho rápido opcional pelo teclado
         k.onKeyPress(["space", "r"], () => k.go("game"));
     } else {
