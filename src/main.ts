@@ -1393,20 +1393,6 @@ k.scene("game", () => {
 
     k.onKeyPress(["escape", "p"], () => togglePause());
 
-    // Atalho de desenvolvedor: Pressione "V" para vitória instantânea
-    k.onKeyPress("v", () => {
-        if (isGamePaused || isGameOver) return;
-        isGameOver = true;
-        if (babyCrySound) babyCrySound.stop();
-        if (engineSound) engineSound.stop();
-        k.go("gameover", {
-            win: true,
-            reason: `Chegou na mãe da criança!\nVocê fez ${entregasFeitas}/7 entregas extra.`,
-            entregasFeitas,
-            entregasPerdidas,
-            tempoDecorridoReal
-        });
-    });
 
     // Lógica de Entrega (Arcade Express)
     k.onKeyPress(["space", "e"], () => {
@@ -1684,6 +1670,35 @@ k.scene("cutscene", () => {
             // Retorna ao menu
             k.go("menu");
         }
+    });
+
+    // ---- CONTROLES DE TECLADO DA CUTSCENE ----
+    // Avançar: Seta Direita, D, Space, Enter
+    k.onKeyPress(["right", "d", "space", "enter"], () => {
+        k.play("sfx_click", { volume: 0.6 });
+        if (currentSlide < 4) {
+            currentSlide++;
+            updateSlide();
+        } else {
+            k.go("game");
+        }
+    });
+
+    // Retroceder: Seta Esquerda, A
+    k.onKeyPress(["left", "a"], () => {
+        k.play("sfx_click", { volume: 0.6 });
+        if (currentSlide > 1) {
+            currentSlide--;
+            updateSlide();
+        } else {
+            k.go("menu");
+        }
+    });
+
+    // Pular cutscene: Escape
+    k.onKeyPress("escape", () => {
+        k.play("sfx_click", { volume: 0.6 });
+        k.go("game");
     });
 
     k.onHover("btn_right", () => {
