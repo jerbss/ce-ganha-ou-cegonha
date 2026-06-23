@@ -52,6 +52,8 @@ k.loadSprite("bg_cutscene_3", "./assets/bg_cutscene_3.png");
 k.loadSprite("bg_cutscene_4", "./assets/bg_cutscene_4.png");
 k.loadSprite("seta_direita", "./assets/ui_seta_direita.png");
 k.loadSprite("seta_esquerda", "./assets/ui_seta_esquerda.png");
+k.loadSprite("seta_direita_hover", "./assets/ui_seta_direita_hover.png");
+k.loadSprite("seta_esquerda_hover", "./assets/ui_seta_esquerda_hover.png");
 // Sprites Personagens e Elementos
 k.loadSprite("moto", "./assets/spr_moto_1.png");
 k.loadSprite("moto_2", "./assets/spr_moto_2.png");
@@ -1790,22 +1792,46 @@ k.scene("cutscene", () => {
     // Seta Esquerda
     const leftArrow = k.add([
         k.sprite("seta_esquerda"),
-        k.pos(50, k.height() / 2), // Centralizado Verticalmente
+        k.pos(80, k.height() / 2), // Centralizado Verticalmente e com mais margem
         k.anchor("center"),
+        k.scale(0.6), // Escala reduzida
         k.area(),
         k.z(10),
         "btn_left"
     ]);
 
+    leftArrow.onHover(() => {
+        if (leftArrow.hidden) return;
+        leftArrow.use(k.sprite("seta_esquerda_hover"));
+        k.setCursor("pointer");
+    });
+
+    leftArrow.onHoverEnd(() => {
+        if (leftArrow.hidden) return;
+        leftArrow.use(k.sprite("seta_esquerda"));
+        k.setCursor("default");
+    });
+
     // Seta Direita
-    k.add([
+    const rightArrow = k.add([
         k.sprite("seta_direita"),
-        k.pos(k.width() - 50, k.height() / 2), // Centralizado Verticalmente
+        k.pos(k.width() - 80, k.height() / 2), // Centralizado Verticalmente e com mais margem
         k.anchor("center"),
+        k.scale(0.6), // Escala reduzida
         k.area(),
         k.z(10),
         "btn_right"
     ]);
+
+    rightArrow.onHover(() => {
+        rightArrow.use(k.sprite("seta_direita_hover"));
+        k.setCursor("pointer");
+    });
+
+    rightArrow.onHoverEnd(() => {
+        rightArrow.use(k.sprite("seta_direita"));
+        k.setCursor("default");
+    });
 
     // Ocultar seta esquerda na primeira tela
     leftArrow.hidden = true;
