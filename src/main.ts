@@ -83,6 +83,9 @@ k.loadSprite("bg_menu_pausa", "./assets/bg_menu_pausa.png");
 k.loadSprite("bg_instrucoes_1", "./assets/instrucoes_1.png");
 k.loadSprite("bg_instrucoes_2", "./assets/instrucoes_2.png");
 k.loadSprite("bg_configuracoes", "./assets/bg_configuracoes.png");
+// Tutorial
+k.loadSprite("tutorial_1", "./assets/tutorial-1.png");
+k.loadSprite("tutorial_2", "./assets/tutorial-2.png");
 
 // ---- ÁUDIO: Carregamento dos BGMs ----
 k.loadSound("bgm_menu", "./assets/tela-inicial.mp3");
@@ -137,6 +140,18 @@ const stopBGM = () => {
 const muffleBGM = (muffled: boolean) => {
     if (!_currentBGM) return;
     _currentBGM.paused = muffled;
+};
+
+const setGameplayAudioPaused = (paused: boolean, audioTargets?: { engineSound?: any; babyCrySound?: any }) => {
+    muffleBGM(paused);
+
+    if (audioTargets?.engineSound) {
+        try { audioTargets.engineSound.paused = paused; } catch (e) { }
+    }
+
+    if (audioTargets?.babyCrySound) {
+        try { audioTargets.babyCrySound.paused = paused; } catch (e) { }
+    }
 };
 
 export const isFullscreenActive = () => {
@@ -266,12 +281,152 @@ export function createStandardButton(text: string, pos: any, action: () => void,
     return btn;
 }
 
+// ---- COMPONENTE DE TUTORIAL MODAL ----
+export function createTutorialOverlay(spriteKey: string, buttonText: string, onClose: () => void): any {
+    // Estado para rastrear se o overlay está ativo
+    let isActive = true;
+
+    // Overlay semi-transparente de fundo
+    const overlay = k.add([
+        k.rect(k.width(), k.height()),
+        k.pos(0, 0),
+        k.color(0, 0, 0),
+        k.opacity(0.6),
+        k.fixed(),
+        k.z(5000),
+        "tutorial_overlay_bg"
+    ]);
+
+    // Pausa o jogo
+    isGamePaused = true;
+
+    // Container para a imagem do tutorial (centralizado)
+    const tutorialContainer = k.add([
+        k.pos(k.width() / 2, k.height() / 2),
+        k.anchor("center"),
+        k.fixed(),
+        k.z(5001),
+        "tutorial_container"
+    ]);
+
+    // Imagem do tutorial
+    const tutorialImage = tutorialContainer.add([
+        k.sprite(spriteKey),
+        k.pos(0, 0),
+        k.anchor("center"),
+        k.scale(1)
+    ]);
+
+    // Botão no espaço inferior (branco) da imagem
+    // Assumindo que a imagem é quadrada e tem espaço em branco na parte inferior
+    const imageHeight = tutorialImage.height || 400; // fallback de 400px
+    const buttonYOffset = (imageHeight / 2) - 58; // um pouco mais alto para respirar da borda inferior
+
+    const btn = tutorialContainer.add([
+        k.rect(200, 48, { radius: 24 }),
+        k.pos(0, buttonYOffset),
+        k.anchor("center"),
+        k.color(74, 229, 226), // Ciano
+        k.area(),
+        {
+            plateObj: null as any,
+            labelObj: null as any,
+        }
+    ]);
+
+    // Sombra do botão
+    const btnShadow = tutorialContainer.add([
+        k.rect(200, 48, { radius: 24 }),
+        k.pos(4, buttonYOffset + 4),
+        k.anchor("center"),
+        k.color(30, 112, 128), // Azul marinho
+        k.z(-1)
+    ]);
+
+    // Texto do botão
+    const btnLabel = btn.add([
+        k.text(buttonText, {
+            size: 24,
+            font: "Fredoka",
+            align: "center"
+        }),
+        k.anchor("center"),
+        k.pos(0, 0),
+        k.color(0, 0, 0),
+        k.outline(2, k.rgb(255, 255, 255))
+    ]);
+
+    (btn as any).plateObj = btn;
+    (btn as any).labelObj = btnLabel;
+
+    const finishTutorial = () => {
+        if (!isActive) return;
+
+        isActive = false;
+        overlay.destroy();
+        tutorialContainer.destroy();
+        btnShadow.destroy();
+        isGamePaused = false;
+
+        onClose();
+    };
+
+    // Hover effects
+    btn.onHover(() => {
+        if ((btn as any).disabled) return;
+        if (btn.color.r !== 53) {
+            k.play("sfx_hover", { volume: 0.5 });
+        }
+        btn.color = k.rgb(53, 181, 235);
+        btnShadow.color = k.rgb(20, 90, 110);
+        k.setCursor("pointer");
+    });
+
+    btn.onHoverEnd(() => {
+        if ((btn as any).disabled) return;
+        btn.color = k.rgb(74, 229, 226);
+        btnShadow.color = k.rgb(30, 112, 128);
+        k.setCursor("default");
+    });
+
+    // Click handler
+    btn.onClick(() => {
+        k.play("sfx_click", { volume: 0.6 });
+        // Efeito de pressão
+        btn.pos.y += 2;
+        btnLabel.pos.y += 2;
+
+        k.wait(0.1, () => {
+            btn.pos.y -= 2;
+            btnLabel.pos.y -= 2;
+
+            finishTutorial();
+        });
+    });
+
+    return {
+        destroy: () => {
+            if (isActive) {
+                overlay.destroy();
+                tutorialContainer.destroy();
+                btnShadow.destroy();
+                isGamePaused = false;
+                isActive = false;
+            }
+        }
+    };
+}
+
 k.scene("game", () => {
     // ---- BGM DA GAMEPLAY ----
     playBGM("bgm_gameplay");
 
     let engineSound: any = null;
     let targetEngineVol = 0.1;
+
+    const pauseGameplayAudio = (paused: boolean) => {
+        setGameplayAudioPaused(paused, { engineSound, babyCrySound });
+    };
 
     const playEngineLoop = (seekTime: number) => {
         try {
@@ -1361,24 +1516,12 @@ k.scene("game", () => {
 
             showMainMenu();
 
-            muffleBGM(true);
-            if (engineSound) {
-                try { engineSound.paused = true; } catch (e) { }
-            }
-            if (babyCrySound) {
-                try { babyCrySound.paused = true; } catch (e) { }
-            }
+            pauseGameplayAudio(true);
             try { (k as any).pause && (k as any).pause(); } catch (e) { }
         } else {
             isPaused = false;
             isGamePaused = false;
-            muffleBGM(false);
-            if (engineSound) {
-                try { engineSound.paused = false; } catch (e) { }
-            }
-            if (babyCrySound) {
-                try { babyCrySound.paused = false; } catch (e) { }
-            }
+            pauseGameplayAudio(false);
 
             if (pauseOverlay && pauseOverlay.destroy) pauseOverlay.destroy();
             if (pauseCloseBtn && pauseCloseBtn.destroy) pauseCloseBtn.destroy();
@@ -1475,6 +1618,29 @@ k.scene("game", () => {
         document.removeEventListener("fullscreenchange", onFullScreenChangeGame);
         document.removeEventListener("webkitfullscreenchange", onFullScreenChangeGame);
     });
+
+    // ---- SISTEMA DE TUTORIAL ----
+    // Verifica se o tutorial já foi mostrado nesta sessão
+    const tutorialShown = sessionStorage.getItem("tutorialShown");
+    
+    if (!tutorialShown) {
+        // Delay de 3 segundos para o "respiro" (gameplay rodando antes do tutorial)
+        k.wait(3, () => {
+            pauseGameplayAudio(true);
+
+            // Mostrar primeiro tutorial
+            createTutorialOverlay("tutorial_1", "Próximo", () => {
+                // Após fechar o primeiro, mostrar o segundo
+                k.wait(0.5, () => {
+                    createTutorialOverlay("tutorial_2", "Começar", () => {
+                        // Tutorial completo
+                        sessionStorage.setItem("tutorialShown", "true");
+                        pauseGameplayAudio(false);
+                    });
+                });
+            });
+        });
+    }
 
     // 6. Sistema de Motor (Acelerar/Freio) e velocidade implacável global
     k.onUpdate(() => {
